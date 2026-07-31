@@ -108,11 +108,15 @@ def register():
         db.session.rollback()
         import traceback
         traceback.print_exc()
-        print(f'Registration error: {str(e)}')
+        error_str = str(e)
+        if any(err_kw in error_str for err_kw in ['Can\'t connect', 'Connection refused', 'InterfaceError', 'OperationalError', 'timeout', 'timed out']):
+            return jsonify({
+                'success': False,
+                'message': 'Database connection error. Please verify DATABASE_URL in Vercel settings (use Supabase Pooler port 6543 connection string).'
+            }), 500
         return jsonify({
             'success': False,
-            'message': 'Server error during registration',
-            'error': str(e)
+            'message': f'Server error during registration: {error_str}'
         }), 500
 
 # @route   POST /api/auth/login
