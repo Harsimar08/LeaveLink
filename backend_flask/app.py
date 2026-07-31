@@ -176,6 +176,18 @@ def health():
             'error': str(e)
         }), 500
 
+# Before request hook to guarantee tables exist on serverless cold start
+@app.before_request
+def ensure_database_initialized():
+    if not getattr(app, '_db_tables_ready', False):
+        try:
+            from models.user import User
+            from models.leave import Leave
+            db.create_all()
+            app._db_tables_ready = True
+        except Exception as e:
+            print(f'[DB Init Error] {e}')
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -183,19 +195,7 @@ def not_found(error):
 
 @app.errorhandler(500)
 def internal_error(error):
-    return jsonify({'success': False, 'message': 'Internal server error'}), 500
-
-# Create tables
-with app.app_context():
-    try:
-        # Import models here to avoid circular imports
-        from models.user import User
-        from models.leave import Leave
-        
-        db.create_all()
-        print('[DB] Database tables created successfully')
-    except Exception as e:
-        print(f'[DB Warning] Database init deferred: {e}')
+    return jsonify({'success': False, 'message': f'Internal server error: {str(error)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))

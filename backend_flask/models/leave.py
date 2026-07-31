@@ -6,16 +6,12 @@ class Leave(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    leave_type = db.Column(db.Enum('Casual Leave', 'Earned Leave', 'Marriage Leave', 
-                                   'Sick Leave', 'Maternity Leave', 'Paternity Leave', 
-                                   'Floater Leave', 'Unpaid Leave', 'Special Leave'), 
-                          nullable=False)
+    leave_type = db.Column(db.String(50), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     number_of_days = db.Column(db.Integer, nullable=False)
     reason = db.Column(db.Text, nullable=False)
-    status = db.Column(db.Enum('Pending', 'Approved', 'Rejected', 'Cancelled'), 
-                       default='Pending', nullable=False)
+    status = db.Column(db.String(50), default='Pending', nullable=False)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     approver_name = db.Column(db.String(100))
     action_date = db.Column(db.DateTime)

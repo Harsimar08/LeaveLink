@@ -9,8 +9,7 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.Enum('faculty', 'coordinator', 'chief_coordinator', 'principal', 'management'), 
-                     default='faculty', nullable=False)
+    role = db.Column(db.String(50), default='faculty', nullable=False)
     department = db.Column(db.String(100))
     employee_id = db.Column(db.String(50), unique=True)
     phone_number = db.Column(db.String(20))
