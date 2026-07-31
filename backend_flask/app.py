@@ -191,7 +191,7 @@ def health():
             'error': str(e)
         }), 500
 
-# Before request hook to guarantee tables exist on serverless cold start
+# Before request hook to guarantee tables exist on serverless cold start with automatic failover
 @app.before_request
 def ensure_database_initialized():
     if not getattr(app, '_db_tables_ready', False):
@@ -200,8 +200,21 @@ def ensure_database_initialized():
             from models.leave import Leave
             db.create_all()
             app._db_tables_ready = True
+            print('[DB] Primary database initialized successfully')
         except Exception as e:
-            print(f'[DB Init Error] {e}')
+            print(f'[DB Init Error] Primary DB failed: {e}. Switching to failover database...')
+            try:
+                base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
+                sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
+                app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
+                db.engine.dispose()
+                from models.user import User
+                from models.leave import Leave
+                db.create_all()
+                app._db_tables_ready = True
+                print('[DB Failover] SQLite failover database ready!')
+            except Exception as fe:
+                print(f'[DB Failover Error] {fe}')
 
 # Error handlers
 @app.errorhandler(404)
