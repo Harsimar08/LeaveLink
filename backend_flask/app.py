@@ -19,13 +19,24 @@ app.url_map.strict_slashes = False
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root@localhost:3306/leavelink')
+
+db_url = os.getenv('DATABASE_URL')
+# On serverless (Vercel) or when DATABASE_URL is not set / points to unreachable localhost MySQL, use SQLite for zero-config reliability
+if not db_url or ('localhost' in db_url and os.getenv('VERCEL')):
+    base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
+    db_path = os.path.join(base_dir, 'leavelink.db')
+    db_url = f'sqlite:///{db_path}'
+elif db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
 # Upload configuration
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+base_upload_dir = '/tmp/uploads' if os.getenv('VERCEL') else os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['UPLOAD_FOLDER'] = base_upload_dir
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Session configuration for OAuth
@@ -64,16 +75,8 @@ def expired_token_callback(jwt_header, jwt_payload):
     }), 401
 
 # CORS configuration
-allowed_origins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://leavelink.vercel.app',
-    os.getenv('FRONTEND_URL')
-]
-allowed_origins = [origin for origin in allowed_origins if origin]
-
 CORS(app, 
-     origins=allowed_origins,
+     origins='*',
      supports_credentials=True,
      methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
      allow_headers=['Content-Type', 'Authorization'])
@@ -89,12 +92,17 @@ from routes.holidays import holidays_bp
 # Initialize OAuth
 init_oauth(app)
 
-# Register blueprints
+# Register blueprints for both /api/* and /* to handle any Vercel serverless path stripping
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(users_bp, url_prefix='/api/users')
 app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
 app.register_blueprint(oauth_bp, url_prefix='/api/auth')
 app.register_blueprint(holidays_bp, url_prefix='/api/holidays')
+
+app.register_blueprint(auth_bp, url_prefix='/auth', name='auth_direct')
+app.register_blueprint(users_bp, url_prefix='/users', name='users_direct')
+app.register_blueprint(leaves_bp, url_prefix='/leaves', name='leaves_direct')
+app.register_blueprint(holidays_bp, url_prefix='/holidays', name='holidays_direct')
 
 # Root route
 @app.route('/')
