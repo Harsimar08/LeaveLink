@@ -38,6 +38,9 @@ try:
         if 'sslmode=' not in db_url:
             delimiter = '&' if '?' in db_url else '?'
             db_url = f'{db_url}{delimiter}sslmode=require'
+    elif db_url.startswith('mysql://') or db_url.startswith('mysql+pymysql://'):
+        if db_url.startswith('mysql://'):
+            db_url = 'mysql+pymysql://' + db_url[8:]
 
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     db.init_app(app)
