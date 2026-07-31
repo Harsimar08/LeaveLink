@@ -196,7 +196,10 @@ def ensure_database_initialized():
                 base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
                 sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
                 app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
-                db.engine.dispose()
+                if hasattr(db, '_engines'):
+                    db._engines.clear()
+                if hasattr(db, 'engines'):
+                    db.engines.clear()
                 from models.user import User
                 from models.leave import Leave
                 db.create_all()
