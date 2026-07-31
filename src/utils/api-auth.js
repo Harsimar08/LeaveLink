@@ -14,7 +14,7 @@ const safeParseJson = async (response) => {
   }
 
   if (!response.ok) {
-    const errorMsg = data.message || data.error || (response.status === 500 ? 'Server error during database query. Please check database connection.' : `Server error (${response.status}). Please try again.`)
+    const errorMsg = data.message || data.error || `Server error (${response.status}). Please try again.`
     throw new Error(errorMsg)
   }
 
