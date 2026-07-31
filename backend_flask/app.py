@@ -19,7 +19,7 @@ app.url_map.strict_slashes = False
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root@localhost:3306/techtimeoff')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root@localhost:3306/leavelink')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
@@ -29,7 +29,7 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Session configuration for OAuth
-app.config['SESSION_COOKIE_NAME'] = 'techtimeoff_session'
+app.config['SESSION_COOKIE_NAME'] = 'leavelink_session'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
@@ -67,7 +67,7 @@ def expired_token_callback(jwt_header, jwt_payload):
 allowed_origins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://teachtimeoff.vercel.app',
+    'https://leavelink.vercel.app',
     os.getenv('FRONTEND_URL')
 ]
 allowed_origins = [origin for origin in allowed_origins if origin]
@@ -100,7 +100,7 @@ app.register_blueprint(holidays_bp, url_prefix='/api/holidays')
 @app.route('/')
 def index():
     return jsonify({
-        'message': '🚀 TechTimeOff API Server (Flask)',
+        'message': '🚀 LeaveLink API Server (Flask)',
         'version': '2.0.0',
         'database': 'MySQL',
         'endpoints': {
@@ -121,7 +121,7 @@ def uploaded_file(filename):
 @app.route('/api')
 def api_root():
     return jsonify({
-        'message': '✅ TechTimeOff API is running',
+        'message': '✅ LeaveLink API is running',
         'version': '2.0.0',
         'database': 'MySQL',
         'endpoints': {

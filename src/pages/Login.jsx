@@ -226,7 +226,7 @@ export default function Login() {
               <em style={{ fontStyle: 'italic', fontWeight: 500, color: COLORS.gold300 }}>tracked</em> with care.
             </h1>
             <p style={{ marginTop: 20, fontSize: 15.5, lineHeight: 1.6, color: 'rgba(255,255,255,0.62)', maxWidth: 380 }}>
-              TeachTimeOff brings attendance, leave balances and approvals into one place for every department at JIMS.
+              LeaveLink brings attendance, leave balances and approvals into one place for every department at JIMS.
             </p>
 
             <div className="tto-stats" style={{ display: 'flex', gap: 36, marginTop: 52, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
@@ -255,7 +255,7 @@ export default function Login() {
         <main style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '32px 32px' }}>
           <div style={{ width: '100%', maxWidth: 440 }}>
             <div style={{ marginBottom: 30 }}>
-              <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 28, color: COLORS.ink900, margin: 0 }}>Sign in to TeachTimeOff</h1>
+              <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 28, color: COLORS.ink900, margin: 0 }}>Sign in to LeaveLink</h1>
               <p style={{ marginTop: 6, fontSize: 14, color: COLORS.ink600 }}>Select your role, then continue with your JIMS email.</p>
             </div>
 

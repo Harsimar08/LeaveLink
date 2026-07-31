@@ -1,4 +1,4 @@
- 192.168.0.110# TeachTimeoff
+# LeaveLink - Faculty & Staff Leave Portal
 
 Merged branch including both kritikay and Aditya changes.
 

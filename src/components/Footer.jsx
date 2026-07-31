@@ -17,7 +17,7 @@ export default function Footer(){
       gap: 12
     }}>
       <div>
-        © {new Date().getFullYear()} <strong style={{ color: '#F7D780' }}>JIMS TeachTimeOff</strong> — Faculty Leave Portal
+        © {new Date().getFullYear()} <strong style={{ color: '#F7D780' }}>JIMS LeaveLink</strong> — Faculty Leave Portal
       </div>
       <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.45)' }}>
         Jagan Institute of Management Studies · All rights reserved

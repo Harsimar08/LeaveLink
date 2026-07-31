@@ -71,7 +71,7 @@ export default function Sidebar({open, onClose}){
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
-              TeachTimeOff
+              LeaveLink
             </span>
             <span style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
               JIMS Faculty Portal

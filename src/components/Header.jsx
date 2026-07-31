@@ -68,7 +68,7 @@ export default function Header({onOpenRequest, onToggleSidebar, sidebarOpen}){
             Jagan Institute of Management Studies
           </span>
           <span style={{ fontSize: 19, fontWeight: 800, color: 'white', letterSpacing: '-0.01em', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            TeachTimeOff <span style={{ opacity: 0.75, fontWeight: 500, fontSize: 13, color: '#F7D780' }}>· Leave Portal</span>
+            LeaveLink <span style={{ opacity: 0.75, fontWeight: 500, fontSize: 13, color: '#F7D780' }}>· Leave Portal</span>
           </span>
         </div>
       </div>
