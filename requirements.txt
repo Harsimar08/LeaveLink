@@ -4,7 +4,7 @@ Flask-Bcrypt
 Flask-JWT-Extended
 Flask-CORS
 PyMySQL
-psycopg2-binary
+pg8000
 python-dotenv
 cryptography
 Authlib

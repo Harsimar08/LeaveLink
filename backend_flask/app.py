@@ -26,8 +26,10 @@ if not db_url or ('localhost' in db_url and os.getenv('VERCEL')):
     base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
     db_path = os.path.join(base_dir, 'leavelink.db')
     db_url = f'sqlite:///{db_path}'
-elif db_url.startswith('postgres://'):
-    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+elif db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
+    if '+pg8000' not in db_url and '+psycopg2' not in db_url:
+        db_url = db_url.replace('postgres://', 'postgresql+pg8000://', 1)
+        db_url = db_url.replace('postgresql://', 'postgresql+pg8000://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
