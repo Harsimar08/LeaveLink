@@ -16,30 +16,8 @@ def safe_db_exec(func):
     try:
         return func()
     except Exception as e:
-        err_msg = str(e)
-        print(f'[Primary DB Query Exception] {err_msg}. Triggering automatic zero-downtime failover...')
-        try:
-            import os
-            from flask import current_app
-            try:
-                db.session.rollback()
-                db.session.remove()
-            except Exception:
-                pass
-            base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
-            sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
-            current_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
-            if hasattr(db, '_engines'):
-                db._engines.clear()
-            if hasattr(db, 'engines'):
-                db.engines.clear()
-            from models.user import User
-            from models.leave import Leave
-            db.create_all()
-            return func()
-        except Exception as fe:
-            print(f'[Failover Execution Failed] {fe}')
-            raise e
+        db.session.rollback()
+        raise e
 
 # @route   POST /api/auth/register
 # @desc    Register a new user
