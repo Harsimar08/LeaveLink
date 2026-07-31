@@ -178,12 +178,15 @@ def internal_error(error):
 
 # Create tables
 with app.app_context():
-    # Import models here to avoid circular imports
-    from models.user import User
-    from models.leave import Leave
-    
-    db.create_all()
-    print('[DB] Database tables created successfully')
+    try:
+        # Import models here to avoid circular imports
+        from models.user import User
+        from models.leave import Leave
+        
+        db.create_all()
+        print('[DB] Database tables created successfully')
+    except Exception as e:
+        print(f'[DB Warning] Database init deferred: {e}')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
