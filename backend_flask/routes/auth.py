@@ -17,6 +17,15 @@ def safe_db_exec(func):
         return func()
     except Exception as e:
         db.session.rollback()
+        err_msg = str(e)
+        if any(kw in err_msg for kw in ['2013', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed']):
+            print(f'[Transient DB Drop] {err_msg}. Auto-retrying with fresh connection...')
+            try:
+                db.session.remove()
+                return func()
+            except Exception as retry_err:
+                db.session.rollback()
+                raise retry_err
         raise e
 
 # @route   POST /api/auth/register

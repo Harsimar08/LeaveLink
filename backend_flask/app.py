@@ -4,6 +4,7 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 
 # Load environment variables
 load_dotenv()
@@ -43,9 +44,10 @@ if raw_db_url and not ('localhost' in raw_db_url and os.getenv('VERCEL')):
     app.config['SQLALCHEMY_DATABASE_URI'] = parsed_url
 
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': 280,
-    'pool_timeout': 30
+    'poolclass': NullPool,
+    'connect_args': {
+        'connect_timeout': 10
+    }
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
