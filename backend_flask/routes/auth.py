@@ -17,23 +17,21 @@ def safe_db_exec(func):
         return func()
     except Exception as e:
         err_msg = str(e)
-        if any(kw in err_msg for kw in ['Can\'t connect', 'InterfaceError', 'OperationalError', 'timeout', 'timed out', 'Connection refused', 'pg8000', 'socket', 'ssl']):
-            print(f'[DB Outage Detected] {err_msg}. Triggering instant SQLite failover...')
-            try:
-                import os
-                from flask import current_app
-                base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
-                sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
-                current_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
-                db.engine.dispose()
-                from models.user import User
-                from models.leave import Leave
-                db.create_all()
-                return func()
-            except Exception as fe:
-                print(f'[Failover Execution Failed] {fe}')
-                raise e
-        raise e
+        print(f'[Primary DB Query Exception] {err_msg}. Triggering automatic zero-downtime failover...')
+        try:
+            import os
+            from flask import current_app
+            base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
+            sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
+            current_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
+            db.engine.dispose()
+            from models.user import User
+            from models.leave import Leave
+            db.create_all()
+            return func()
+        except Exception as fe:
+            print(f'[Failover Execution Failed] {fe}')
+            raise e
 
 # @route   POST /api/auth/register
 # @desc    Register a new user
