@@ -1,8 +1,8 @@
 @echo off
-REM Quick start script for TechTimeOff Flask backend
+REM Quick start script for LeaveLink Flask backend
 
 echo ========================================
-echo Starting TechTimeOff Flask Backend
+echo Starting LeaveLink Flask Backend
 echo ========================================
 echo.
 

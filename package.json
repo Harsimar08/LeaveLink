@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "backend": "python backend_flask/app.py",
     "build": "vite build",
     "preview": "vite preview"
   },
