@@ -1,11 +1,8 @@
 Flask
 Flask-SQLAlchemy
-Flask-Bcrypt
 Flask-JWT-Extended
 Flask-CORS
 PyMySQL
 pg8000
 python-dotenv
-cryptography
-Authlib
 requests

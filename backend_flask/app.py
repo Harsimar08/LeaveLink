@@ -9,7 +9,7 @@ from sqlalchemy import text
 load_dotenv()
 
 # Import extensions
-from extensions import db, bcrypt, jwt
+from extensions import db, jwt
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -49,7 +49,6 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
 # Initialize extensions with app
 db.init_app(app)
-bcrypt.init_app(app)
 jwt.init_app(app)
 
 # JWT error handlers

@@ -1,5 +1,6 @@
 from datetime import datetime
-from extensions import db, bcrypt
+from extensions import db
+from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -29,12 +30,12 @@ class User(db.Model):
     approved_leaves = db.relationship('Leave', back_populates='approver', foreign_keys='Leave.approved_by', lazy=True)
     
     def set_password(self, password):
-        """Hash and set password"""
-        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        """Hash and set password using werkzeug security"""
+        self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
-        """Check if password matches"""
-        return bcrypt.check_password_hash(self.password_hash, password)
+        """Check if password matches using werkzeug security"""
+        return check_password_hash(self.password_hash, password)
     
     def to_dict(self, include_password=False):
         """Convert user to dictionary"""
