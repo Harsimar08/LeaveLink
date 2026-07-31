@@ -20,7 +20,9 @@ app.url_map.strict_slashes = False
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
 
-db_url = os.getenv('DATABASE_URL')
+raw_db_url = os.getenv('DATABASE_URL', '')
+db_url = raw_db_url.strip().strip("'").strip('"')
+
 # On serverless (Vercel) or when DATABASE_URL is not set / points to unreachable localhost MySQL, use SQLite for zero-config reliability
 if not db_url or ('localhost' in db_url and os.getenv('VERCEL')):
     base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
@@ -30,6 +32,9 @@ elif db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
     if '+pg8000' not in db_url and '+psycopg2' not in db_url:
         db_url = db_url.replace('postgres://', 'postgresql+pg8000://', 1)
         db_url = db_url.replace('postgresql://', 'postgresql+pg8000://', 1)
+    if 'sslmode=' not in db_url:
+        delimiter = '&' if '?' in db_url else '?'
+        db_url = f'{db_url}{delimiter}sslmode=require'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

@@ -6,11 +6,19 @@ console.log('🔧 API URL:', API_URL) // Debug log to verify correct URL
 // Helper to parse JSON response safely
 const safeParseJson = async (response) => {
   const text = await response.text()
+  let data = {}
   try {
-    return text ? JSON.parse(text) : {}
+    data = text ? JSON.parse(text) : {}
   } catch {
-    throw new Error(response.ok ? 'Invalid server response' : `Server error (${response.status}). Please try again.`)
+    // text wasn't valid JSON
   }
+
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || (response.status === 500 ? 'Server error during database query. Please check database connection.' : `Server error (${response.status}). Please try again.`)
+    throw new Error(errorMsg)
+  }
+
+  return data
 }
 
 // Authentication Service
