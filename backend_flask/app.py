@@ -43,12 +43,16 @@ if raw_db_url and not ('localhost' in raw_db_url and os.getenv('VERCEL')):
         
     app.config['SQLALCHEMY_DATABASE_URI'] = parsed_url
 
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'poolclass': NullPool,
-    'connect_args': {
-        'connect_timeout': 10
-    }
+engine_options = {
+    'poolclass': NullPool
 }
+
+if 'mysql' in app.config['SQLALCHEMY_DATABASE_URI']:
+    engine_options['connect_args'] = {'connect_timeout': 10}
+elif 'pg8000' in app.config['SQLALCHEMY_DATABASE_URI']:
+    engine_options['connect_args'] = {'timeout': 10}
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)

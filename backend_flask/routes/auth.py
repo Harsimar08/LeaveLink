@@ -12,16 +12,18 @@ def validate_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
 
-def safe_db_exec(func):
+def safe_db_exec(func, prepare_fn=None):
     try:
         return func()
     except Exception as e:
         db.session.rollback()
         err_msg = str(e)
-        if any(kw in err_msg for kw in ['2013', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed']):
+        if any(kw in err_msg for kw in ['2013', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed', 'socket']):
             print(f'[Transient DB Drop] {err_msg}. Auto-retrying with fresh connection...')
             try:
                 db.session.remove()
+                if prepare_fn:
+                    prepare_fn()
                 return func()
             except Exception as retry_err:
                 db.session.rollback()
@@ -93,7 +95,10 @@ def register():
         
         db.session.add(user)
         try:
-            safe_db_exec(lambda: db.session.commit())
+            safe_db_exec(
+                func=lambda: db.session.commit(),
+                prepare_fn=lambda: db.session.add(user)
+            )
         except IntegrityError as ie:
             db.session.rollback()
             # Determine if it's a duplicate employee_id or other unique constraint
