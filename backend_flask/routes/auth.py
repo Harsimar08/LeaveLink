@@ -21,6 +21,11 @@ def safe_db_exec(func):
         try:
             import os
             from flask import current_app
+            try:
+                db.session.rollback()
+                db.session.remove()
+            except Exception:
+                pass
             base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
             sqlite_url = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
             current_app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_url
