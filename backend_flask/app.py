@@ -32,6 +32,16 @@ elif db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
     if '+pg8000' not in db_url and '+psycopg2' not in db_url:
         db_url = db_url.replace('postgres://', 'postgresql+pg8000://', 1)
         db_url = db_url.replace('postgresql://', 'postgresql+pg8000://', 1)
+    
+    # Auto-convert direct Supabase port 5432 to Pooler IPv4 if direct host is used
+    if 'supabase.co:5432' in db_url:
+        import re
+        match = re.search(r'db\.([a-z0-9]+)\.supabase\.co', db_url)
+        if match:
+            ref = match.group(1)
+            db_url = db_url.replace('postgres:', f'postgres.{ref}:', 1)
+            db_url = re.sub(r'db\.[a-z0-9]+\.supabase\.co:5432', 'aws-0-ap-northeast-1.pooler.supabase.com:6543', db_url)
+
     if 'sslmode=' not in db_url:
         delimiter = '&' if '?' in db_url else '?'
         db_url = f'{db_url}{delimiter}sslmode=require'
