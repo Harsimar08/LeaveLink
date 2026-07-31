@@ -1,5 +1,5 @@
-// API Configuration - Use environment variable or fallback to localhost
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// API Configuration - Use environment variable, or fallback to relative '/api' in production (Vercel) / localhost in dev
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api')
 
 console.log('🔧 API URL:', API_URL) // Debug log to verify correct URL
 
@@ -36,7 +36,7 @@ export const authenticateUser = async (email, password, role) => {
     }
   } catch (error) {
     if (error.name === 'TypeError' || error.message?.includes('fetch') || error.message?.includes('Network')) {
-      throw new Error('Cannot connect to server. Ensure the backend is running on port 5000 and VITE_API_URL is correct.')
+      throw new Error('Cannot connect to server. Ensure the backend is reachable.')
     }
     console.error('Authentication error:', error)
     throw error
@@ -66,7 +66,7 @@ export const registerUser = async (userData) => {
     }
   } catch (error) {
     if (error.name === 'TypeError' || error.message?.includes('fetch') || error.message?.includes('Network')) {
-      throw new Error('Cannot connect to server. Ensure the backend is running on port 5000 and VITE_API_URL is correct.')
+      throw new Error('Cannot connect to server. Ensure the backend is reachable.')
     }
     console.error('Registration error:', error)
     throw error
