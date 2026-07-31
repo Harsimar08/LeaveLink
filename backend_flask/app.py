@@ -91,23 +91,26 @@ CORS(app,
 from routes.auth import auth_bp
 from routes.users import users_bp
 from routes.leaves import leaves_bp
-from routes.oauth import oauth_bp, init_oauth
 from routes.holidays import holidays_bp
-
-# Initialize OAuth
-init_oauth(app)
 
 # Register blueprints for both /api/* and /* to handle any Vercel serverless path stripping
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(users_bp, url_prefix='/api/users')
 app.register_blueprint(leaves_bp, url_prefix='/api/leaves')
-app.register_blueprint(oauth_bp, url_prefix='/api/auth')
 app.register_blueprint(holidays_bp, url_prefix='/api/holidays')
 
 app.register_blueprint(auth_bp, url_prefix='/auth', name='auth_direct')
 app.register_blueprint(users_bp, url_prefix='/users', name='users_direct')
 app.register_blueprint(leaves_bp, url_prefix='/leaves', name='leaves_direct')
 app.register_blueprint(holidays_bp, url_prefix='/holidays', name='holidays_direct')
+
+# Initialize optional OAuth
+try:
+    from routes.oauth import oauth_bp, init_oauth
+    init_oauth(app)
+    app.register_blueprint(oauth_bp, url_prefix='/api/auth')
+except Exception as oauth_err:
+    print(f'[OAuth Init Warning] {oauth_err}')
 
 # Root route
 @app.route('/')

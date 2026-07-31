@@ -6,3 +6,5 @@ PyMySQL
 pg8000
 python-dotenv
 requests
+Authlib
+
