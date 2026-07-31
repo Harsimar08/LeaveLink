@@ -1,0 +1,124 @@
+.leave-history-section {
+  margin-top: 32px;
+}
+
+.leave-history-header {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0B1D30;
+  font-family: 'Source Serif 4', Georgia, serif;
+  margin-bottom: 20px;
+}
+
+.leave-history-filters {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-dropdown {
+  position: relative;
+  min-width: 190px;
+}
+
+.filter-button {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #E3E6EA;
+  border-radius: 12px;
+  background: white;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: #182230;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(15, 29, 48, 0.04);
+}
+
+.filter-button:hover {
+  border-color: #C9A227;
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.12);
+}
+
+.filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  background: white;
+  border: 1px solid #E3E6EA;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 29, 48, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.search-box {
+  padding: 10px;
+  border-bottom: 1px solid #E3E6EA;
+  background: #F4F5F7;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #E3E6EA;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.search-box input:focus {
+  border-color: #C9A227;
+}
+
+.filter-options {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #182230;
+  transition: background 0.15s ease;
+}
+
+.filter-option:hover {
+  background: #F4F5F7;
+  color: #B08A2E;
+}
+
+.filter-option input[type="checkbox"] {
+  margin-right: 10px;
+  accent-color: #C9A227;
+}
+
+.search-filter {
+  flex: 1;
+  max-width: 280px;
+}
+
+.search-filter input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #E3E6EA;
+  border-radius: 12px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-filter input:focus {
+  border-color: #C9A227;
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
