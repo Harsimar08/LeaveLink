@@ -20,39 +20,45 @@ app.url_map.strict_slashes = False
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
 
-try:
-    raw_db_url = os.getenv('DATABASE_URL', '')
-    db_url = raw_db_url.strip().strip("'").strip('"')
+# 1. ALWAYS set default fallback SQLALCHEMY_DATABASE_URI first
+base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
 
-    # On serverless (Vercel) or when DATABASE_URL is not set / points to unreachable localhost MySQL, use SQLite for zero-config reliability
-    if not db_url or ('localhost' in db_url and os.getenv('VERCEL')):
-        base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
-        db_path = os.path.join(base_dir, 'leavelink.db')
-        db_url = f'sqlite:///{db_path}'
-    elif db_url.startswith('postgres://') or db_url.startswith('postgresql://'):
-        if db_url.startswith('postgres://'):
-            db_url = 'postgresql+pg8000://' + db_url[11:]
-        elif db_url.startswith('postgresql://') and not db_url.startswith('postgresql+'):
-            db_url = 'postgresql+pg8000://' + db_url[13:]
+# 2. Parse DATABASE_URL environment variable if set
+raw_db_url = os.getenv('DATABASE_URL', '').strip().strip("'").strip('"')
 
-        if 'sslmode=' not in db_url:
-            delimiter = '&' if '?' in db_url else '?'
-            db_url = f'{db_url}{delimiter}sslmode=require'
-    elif db_url.startswith('mysql://') or db_url.startswith('mysql+pymysql://'):
-        if db_url.startswith('mysql://'):
-            db_url = 'mysql+pymysql://' + db_url[8:]
+if raw_db_url and not ('localhost' in raw_db_url and os.getenv('VERCEL')):
+    parsed_url = raw_db_url
+    if parsed_url.startswith('postgres://'):
+        parsed_url = 'postgresql+pg8000://' + parsed_url[11:]
+    elif parsed_url.startswith('postgresql://') and not parsed_url.startswith('postgresql+'):
+        parsed_url = 'postgresql+pg8000://' + parsed_url[13:]
+    elif parsed_url.startswith('mysql://'):
+        parsed_url = 'mysql+pymysql://' + parsed_url[8:]
+        
+    if ('postgres' in parsed_url or 'pg8000' in parsed_url) and 'sslmode=' not in parsed_url:
+        delimiter = '&' if '?' in parsed_url else '?'
+        parsed_url = f'{parsed_url}{delimiter}sslmode=require'
+        
+    app.config['SQLALCHEMY_DATABASE_URI'] = parsed_url
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    db.init_app(app)
-except Exception as db_init_err:
-    print(f'[DB Config Exception] {db_init_err}. Falling back to SQLite.')
-    base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
-    try:
-        db.init_app(app)
-    except Exception:
-        pass
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
+# Upload configuration
+base_upload_dir = '/tmp/uploads' if os.getenv('VERCEL') else os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['UPLOAD_FOLDER'] = base_upload_dir
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Session configuration for OAuth
+app.config['SESSION_COOKIE_NAME'] = 'leavelink_session'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+
+# Initialize extensions ONCE with guaranteed valid SQLALCHEMY_DATABASE_URI
+db.init_app(app)
 jwt.init_app(app)
 
 # JWT error handlers
