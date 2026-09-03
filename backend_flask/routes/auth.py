@@ -18,7 +18,7 @@ def safe_db_exec(func, prepare_fn=None):
     except Exception as e:
         db.session.rollback()
         err_msg = str(e)
-        if any(kw in err_msg for kw in ['2013', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed', 'socket']):
+        if any(kw in err_msg for kw in ['2013', '2006', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed', 'socket', 'gone away']):
             print(f'[Transient DB Drop] {err_msg}. Auto-retrying with fresh connection...')
             try:
                 db.session.remove()
@@ -93,11 +93,11 @@ def register():
         )
         user.set_password(data['password'])
         
-        db.session.add(user)
         try:
+            db.session.add(user)
             safe_db_exec(
                 func=lambda: db.session.commit(),
-                prepare_fn=lambda: db.session.add(user)
+                prepare_fn=lambda: db.session.merge(user)
             )
         except IntegrityError as ie:
             db.session.rollback()
@@ -130,6 +130,11 @@ def register():
         import traceback
         traceback.print_exc()
         error_str = str(e)
+        if any(kw in error_str for kw in ['2013', '2006', 'Lost connection', 'OperationalError', 'InterfaceError', 'closed', 'socket', 'gone away']):
+            return jsonify({
+                'success': False,
+                'message': 'Database connection lost. The cloud database host is unreachable or dropped connection. Please check database settings or redeploy.'
+            }), 500
         return jsonify({
             'success': False,
             'message': f'Server error during registration: {error_str}'

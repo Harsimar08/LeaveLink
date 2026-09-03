@@ -3,7 +3,7 @@ from flask_cors import CORS
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 # Load environment variables
@@ -11,6 +11,63 @@ load_dotenv()
 
 # Import extensions
 from extensions import db, jwt
+
+
+def get_sqlite_database_uri():
+    base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
+    return f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
+
+
+def normalize_database_url(raw_db_url):
+    parsed_url = raw_db_url
+    if parsed_url.startswith('postgres://'):
+        parsed_url = 'postgresql+pg8000://' + parsed_url[11:]
+    elif parsed_url.startswith('postgresql://') and not parsed_url.startswith('postgresql+'):
+        parsed_url = 'postgresql+pg8000://' + parsed_url[13:]
+    elif parsed_url.startswith('mysql://'):
+        parsed_url = 'mysql+pymysql://' + parsed_url[8:]
+
+    if ('postgres' in parsed_url or 'pg8000' in parsed_url) and 'sslmode=' not in parsed_url:
+        delimiter = '&' if '?' in parsed_url else '?'
+        parsed_url = f'{parsed_url}{delimiter}sslmode=require'
+
+    return parsed_url
+
+
+def resolve_database_uri():
+    fallback_uri = get_sqlite_database_uri()
+    raw_db_url = os.getenv('DATABASE_URL', '').strip().strip("'").strip('"')
+
+    if not raw_db_url or ("localhost" in raw_db_url and os.getenv('VERCEL')):
+        return fallback_uri
+
+    candidate = normalize_database_url(raw_db_url)
+    engine_options = {
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
+
+    if os.getenv('VERCEL'):
+        engine_options['poolclass'] = NullPool
+
+    if 'mysql' in candidate:
+        engine_options['connect_args'] = {
+            'connect_timeout': 10,
+            'read_timeout': 30,
+            'write_timeout': 30,
+        }
+    elif 'pg8000' in candidate:
+        engine_options['connect_args'] = {'timeout': 10}
+
+    try:
+        engine = create_engine(candidate, **engine_options)
+        with engine.connect() as connection:
+            connection.execute(text('SELECT 1'))
+        return candidate
+    except Exception as exc:
+        print(f'[DB] Configured database is unreachable ({candidate}). Falling back to SQLite. Error: {exc}')
+        return fallback_uri
+
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -20,35 +77,22 @@ app.url_map.strict_slashes = False
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
-
-# 1. ALWAYS set default fallback SQLALCHEMY_DATABASE_URI first
-base_dir = '/tmp' if os.getenv('VERCEL') else os.path.dirname(__file__)
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(base_dir, "leavelink.db")}'
-
-# 2. Parse DATABASE_URL environment variable if set
-raw_db_url = os.getenv('DATABASE_URL', '').strip().strip("'").strip('"')
-
-if raw_db_url and not ('localhost' in raw_db_url and os.getenv('VERCEL')):
-    parsed_url = raw_db_url
-    if parsed_url.startswith('postgres://'):
-        parsed_url = 'postgresql+pg8000://' + parsed_url[11:]
-    elif parsed_url.startswith('postgresql://') and not parsed_url.startswith('postgresql+'):
-        parsed_url = 'postgresql+pg8000://' + parsed_url[13:]
-    elif parsed_url.startswith('mysql://'):
-        parsed_url = 'mysql+pymysql://' + parsed_url[8:]
-        
-    if ('postgres' in parsed_url or 'pg8000' in parsed_url) and 'sslmode=' not in parsed_url:
-        delimiter = '&' if '?' in parsed_url else '?'
-        parsed_url = f'{parsed_url}{delimiter}sslmode=require'
-        
-    app.config['SQLALCHEMY_DATABASE_URI'] = parsed_url
+app.config['SQLALCHEMY_DATABASE_URI'] = resolve_database_uri()
 
 engine_options = {
-    'poolclass': NullPool
+    'pool_pre_ping': True,
+    'pool_recycle': 280,
 }
 
+if os.getenv('VERCEL'):
+    engine_options['poolclass'] = NullPool
+
 if 'mysql' in app.config['SQLALCHEMY_DATABASE_URI']:
-    engine_options['connect_args'] = {'connect_timeout': 10}
+    engine_options['connect_args'] = {
+        'connect_timeout': 10,
+        'read_timeout': 30,
+        'write_timeout': 30
+    }
 elif 'pg8000' in app.config['SQLALCHEMY_DATABASE_URI']:
     engine_options['connect_args'] = {'timeout': 10}
 
@@ -211,7 +255,13 @@ def ensure_database_initialized():
             app._db_tables_ready = True
             print('[DB] Database tables initialized successfully')
         except Exception as e:
+            db.session.rollback()
+            db.session.remove()
             print(f'[DB Init Warning] {e}')
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db.session.remove()
 
 # Error handlers
 @app.errorhandler(404)
