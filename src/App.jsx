@@ -17,6 +17,7 @@ import AuthCallback from './pages/AuthCallback'
 import Approvals from './pages/Approvals'
 import LeaveRequestDetails from './pages/LeaveRequestDetails'
 import ManagementDashboard from './pages/ManagementDashboard'
+import PrincipalDashboard from './pages/PrincipalDashboard'
 
 export default function App() {
   const { isAuthenticated, loading, user } = useAuth()
@@ -81,7 +82,11 @@ export default function App() {
         <main className={`main-root ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={user?.role === 'management' ? <Navigate to="/management-dashboard" replace /> : <Dashboard />} />
+            <Route path="/dashboard" element={
+              user?.role === 'management' ? <Navigate to="/management-dashboard" replace /> :
+              user?.role === 'principal' ? <Navigate to="/principal-dashboard" replace /> :
+              <Dashboard />
+            } />
             <Route path="/profile" element={user?.role === 'management' ? <Navigate to="/management-dashboard" replace /> : <Profile />} />
             <Route path="/leave-request" element={user?.role === 'management' ? <Navigate to="/management-dashboard" replace /> : <LeaveRequest />} />
             <Route path="/leave-balance" element={user?.role === 'management' ? <Navigate to="/management-dashboard" replace /> : <LeaveBalance />} />
@@ -90,6 +95,7 @@ export default function App() {
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/leave-request-details" element={<LeaveRequestDetails />} />
             <Route path="/management-dashboard" element={<ManagementDashboard />} />
+            <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
             <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>

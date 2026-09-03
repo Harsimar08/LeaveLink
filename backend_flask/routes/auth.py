@@ -82,13 +82,17 @@ def register():
                 'message': 'User with this email already exists'
             }), 400
         
+        # Clean employee_id and department
+        raw_emp_id = (data.get('employeeId') or '').strip()
+        raw_dept = (data.get('department') or '').strip()
+        
         # Create new user
         user = User(
             name=data['name'].strip(),
             email=data['email'].lower().strip(),
             role=data['role'],
-            department=data.get('department', '').strip() if data.get('department') else None,
-            employee_id=data.get('employeeId', '').strip() if data.get('employeeId') else None,
+            department=raw_dept if raw_dept else ('Administration' if data['role'] in ['principal', 'management'] else 'General'),
+            employee_id=raw_emp_id if raw_emp_id else None,
             phone_number=data.get('phoneNumber', '').strip() if data.get('phoneNumber') else None
         )
         user.set_password(data['password'])

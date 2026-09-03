@@ -131,7 +131,7 @@ export default function Signup() {
       setError('Passwords do not match')
       return false
     }
-    if (!formData.department.trim()) {
+    if (selectedRole !== 'principal' && selectedRole !== 'management' && !formData.department.trim()) {
       setError('Please enter your department')
       return false
     }
@@ -152,7 +152,7 @@ export default function Signup() {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         role: selectedRole,
-        department: formData.department.trim(),
+        department: formData.department.trim() || (selectedRole === 'principal' || selectedRole === 'management' ? 'Administration' : 'General'),
         employeeId: formData.employeeId.trim() || undefined,
         phoneNumber: formData.phoneNumber.trim() || undefined
       }
@@ -166,7 +166,7 @@ export default function Signup() {
           navigate('/management-dashboard')
           break
         case 'principal':
-          navigate('/dashboard')
+          navigate('/principal-dashboard')
           break
         case 'coordinator':
         case 'chief_coordinator':

@@ -115,7 +115,7 @@ export default function Login() {
           navigate('/management-dashboard')
           break
         case 'principal':
-          navigate('/dashboard')
+          navigate('/principal-dashboard')
           break
         case 'coordinator':
         case 'chief_coordinator':
