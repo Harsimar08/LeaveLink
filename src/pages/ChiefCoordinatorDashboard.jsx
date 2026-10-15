@@ -128,7 +128,7 @@ export default function ChiefCoordinatorDashboard(){
                       <span style={{
                         padding: '4px 12px',
                         borderRadius: '12px',
-                        fontSize: '12px',
+                        fontSize: '13px',
                         fontWeight: '600',
                         background: req.priority === 'High' ? '#fee2e2' : '#fef3c7',
                         color: req.priority === 'High' ? '#dc2626' : '#f59e0b'

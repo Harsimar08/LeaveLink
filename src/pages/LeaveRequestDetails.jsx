@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
 export default function LeaveRequestDetails() {
   const navigate = useNavigate()
@@ -224,7 +225,7 @@ export default function LeaveRequestDetails() {
                 <tr key={leave._id || leave.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: 16 }}>
                     <div style={{ fontWeight: 500 }}>{leave.user?.name || 'N/A'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{leave.user?.email}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>{leave.user?.email}</div>
                   </td>
                   <td style={{ padding: 16, fontSize: 14 }}>
                     {leave.user?.role?.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') || 'Faculty'}
@@ -236,7 +237,7 @@ export default function LeaveRequestDetails() {
                   <td style={{ padding: 16, fontSize: 14 }}>
                     {new Date(leave.endDate).toLocaleDateString()}
                   </td>
-                  <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{leave.numberOfDays}</td>
+                  <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{formatLeaveDays(leave)}</td>
                   <td style={{ padding: 16, fontSize: 14, maxWidth: 200 }}>
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {leave.reason}
@@ -263,7 +264,7 @@ export default function LeaveRequestDetails() {
                       borderRadius: 6,
                       background: getStatusColor(leave.status),
                       color: 'white',
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: 500
                     }}>
                       {leave.status}
@@ -274,7 +275,7 @@ export default function LeaveRequestDetails() {
                       {leave.approverName ? (
                         <div>
                           <div style={{ fontWeight: 500 }}>{leave.approverName}</div>
-                          <div style={{ fontSize: 12, color: '#6b7280' }}>
+                          <div style={{ fontSize: 13, color: '#6b7280' }}>
                             {leave.actionDate ? new Date(leave.actionDate).toLocaleDateString() : ''}
                           </div>
                         </div>

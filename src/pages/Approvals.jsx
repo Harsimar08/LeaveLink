@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests, approveLeave, rejectLeave } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
 export default function Approvals(){
   const navigate = useNavigate()
@@ -33,26 +34,32 @@ export default function Approvals(){
       }
     }
 
-    const load = async () => {
-      setLoading(true)
+    let active = true
+    const load = async (showLoading = true) => {
+      if (showLoading) setLoading(true)
       try {
         const all = await getLeaveRequests()
+        if (!active) return
         const approvalRoles = getApprovalRoles(user.role)
         const filtered = all
           .filter(l => l.status === 'Pending')
           .filter(l => l.user?.id !== user?.id)
           .filter(l => approvalRoles.includes(l.user?.role))
 
-        console.log('Approvals loaded:', all, filtered)
         setLeaves(filtered)
       } catch (err) {
         console.error('Failed to load leaves', err)
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     }
 
     load()
+    const interval = setInterval(() => load(false), 15000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [navigate, isAuthenticated, user])
 
   const handleApprove = async (id) => {
@@ -116,43 +123,43 @@ export default function Approvals(){
               <tr>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Teacher</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Requester name</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Requester name</div>
                 </th>
                 {user?.role !== 'management' && <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Role</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Employee level</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Employee level</div>
                 </th>}
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Type</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Leave category</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Leave category</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Dates</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Start → end</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Start → end</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Days</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Requested days</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Requested days</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Remarks</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Reason for leave</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Reason for leave</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Status</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Pending / approved</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Pending / approved</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Applied</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Request date</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Request date</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Document</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Attachment link</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Attachment link</div>
                 </th>
                 <th style={{ textAlign: 'left', padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Actions</div>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Approve / reject</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>Approve / reject</div>
                 </th>
               </tr>
             </thead>
@@ -161,7 +168,7 @@ export default function Approvals(){
                 <tr key={l.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: 12 }}>
                     <div style={{ fontWeight: 500, color: '#111827' }}>{getField(l.user, 'name', 'email') || 'Unknown'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{getField(l.user, 'email', 'name') || '-'}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>{getField(l.user, 'email', 'name') || '-'}</div>
                   </td>
                   {user?.role !== 'management' && (
                     <td style={{ padding: 12, color: '#111827' }}>
@@ -172,7 +179,7 @@ export default function Approvals(){
                   <td style={{ padding: 12, color: '#111827' }}>
                     {getDateValue(getField(l, 'startDate', 'start_date'))} → {getDateValue(getField(l, 'endDate', 'end_date'))}
                   </td>
-                  <td style={{ padding: 12, color: '#111827' }}>{getField(l, 'numberOfDays', 'number_of_days') ?? '-'}</td>
+                  <td style={{ padding: 12, color: '#111827' }}>{formatLeaveDays(l)}</td>
                   <td style={{ padding: 12, color: '#111827' }}>{getField(l, 'reason') || '-'}</td>
                   <td style={{ padding: 12, color: getField(l, 'status') === 'Rejected' ? '#dc2626' : getField(l, 'status') === 'Approved' ? '#15803d' : '#f59e0b' }}>
                     {getField(l, 'status') || 'Pending'}

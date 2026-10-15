@@ -9,7 +9,8 @@ class Leave(db.Model):
     leave_type = db.Column(db.String(50), nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-    number_of_days = db.Column(db.Integer, nullable=False)
+    number_of_days = db.Column(db.Float, nullable=False)
+    is_half_day = db.Column(db.Boolean, default=False, nullable=False)
     reason = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(50), default='Pending', nullable=False)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
@@ -33,6 +34,7 @@ class Leave(db.Model):
             'startDate': self.start_date.isoformat() if self.start_date else None,
             'endDate': self.end_date.isoformat() if self.end_date else None,
             'numberOfDays': self.number_of_days,
+            'isHalfDay': bool(self.is_half_day),
             'reason': self.reason,
             'status': self.status,
             'approvedBy': self.approved_by,

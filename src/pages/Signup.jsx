@@ -263,7 +263,7 @@ export default function Signup() {
               </div>
               <div style={{ lineHeight: 1.25 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '0.01em' }}>JAGAN INSTITUTE OF MANAGEMENT STUDIES</div>
-                <div style={{ fontWeight: 500, fontSize: 12, color: COLORS.gold300, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
+                <div style={{ fontWeight: 500, fontSize: 13, color: COLORS.gold300, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
                   Sector 5 · Rohini · Delhi
                 </div>
               </div>
@@ -271,7 +271,7 @@ export default function Signup() {
           </div>
 
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: COLORS.gold300, marginBottom: 18 }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: COLORS.gold300, marginBottom: 18 }}>
               Faculty Leave Portal
             </div>
             <h1 className="tto-headline" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 46, lineHeight: 1.08, letterSpacing: '-0.01em', maxWidth: 420, margin: 0 }}>
@@ -285,20 +285,20 @@ export default function Signup() {
             <div className="tto-stats" style={{ display: 'flex', gap: 36, marginTop: 52, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>5</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Access roles</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Access roles</div>
               </div>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>1</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Unified portal</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Unified portal</div>
               </div>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>24/7</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Live attendance</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Live attendance</div>
               </div>
             </div>
           </div>
 
-          <div style={{ position: 'relative', zIndex: 1, marginTop: 40, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'rgba(255,255,255,0.45)' }}>
+          <div style={{ position: 'relative', zIndex: 1, marginTop: 40, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: 'rgba(255,255,255,0.45)' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#57c785', boxShadow: '0 0 0 3px rgba(87,199,133,0.18)' }} />
             Systems operational
           </div>
@@ -312,7 +312,7 @@ export default function Signup() {
               <p style={{ marginTop: 6, fontSize: 14, color: COLORS.ink600 }}>Select your role and fill in your details to register with JIMS.</p>
             </div>
 
-            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
               Select your role
             </span>
 
@@ -374,7 +374,7 @@ export default function Signup() {
             <form onSubmit={handleSignup}>
               {/* Full Name */}
               <div style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                   Full Name *
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -405,7 +405,7 @@ export default function Signup() {
 
               {/* Email */}
               <div style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                   JIMS Email *
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -437,7 +437,7 @@ export default function Signup() {
               {/* Department & Employee ID Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                     Department *
                   </span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -467,7 +467,7 @@ export default function Signup() {
                 </div>
 
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                     Employee ID
                   </span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -499,7 +499,7 @@ export default function Signup() {
               {/* Password & Confirm Password Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                     Password *
                   </span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -539,7 +539,7 @@ export default function Signup() {
                 </div>
 
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                     Confirm *
                   </span>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -581,7 +581,7 @@ export default function Signup() {
 
               {/* Phone Number (Optional) */}
               <div style={{ marginBottom: 18 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6, display: 'block' }}>
                   Phone Number (Optional)
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -672,7 +672,7 @@ export default function Signup() {
               </Link>
             </p>
 
-            <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11.5, color: COLORS.ink400, lineHeight: 1.6 }}>
+            <p style={{ textAlign: 'center', marginTop: 24, fontSize: 12.5, color: COLORS.ink400, lineHeight: 1.6 }}>
               By registering, you agree to the{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Terms of Service</a> and{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Privacy Policy</a> of Jagan Institute of Management Studies.

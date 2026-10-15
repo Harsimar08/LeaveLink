@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { updateUserProfile, fetchCurrentUser } from '../utils/api-auth'
+import { updateUserProfile } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
 
 // ===== Corporate Theme Tokens =====
@@ -24,62 +24,35 @@ const C = {
 const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
 const shadowSoft = '0 2px 10px rgba(15, 29, 48, 0.04), 0 1px 3px rgba(15, 29, 48, 0.02)'
 
+const toProfileState = (source) => ({
+  name: source?.name || '',
+  email: source?.email || '',
+  role: source?.role || '',
+  department: source?.department || '',
+  phone: source?.phoneNumber || source?.phone || '',
+  employeeId: source?.employeeId || '',
+  gender: source?.gender || 'Male',
+  qualification: source?.qualification || '',
+  specialization: source?.specialization || '',
+  joiningDate: source?.joiningDate || ''
+})
+
 export default function Profile() {
   const fileInputRef = useRef(null)
   const { user: authUser, refreshUser } = useAuth()
   const [profileImage, setProfileImage] = useState(authUser?.profileImage || null)
   const [editMode, setEditMode] = useState({})
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
-
-  const [user, setUser] = useState({
-    name: '',
-    email: '',
-    role: '',
-    department: '',
-    joiningDate: '',
-    qualification: '',
-    specialization: '',
-    phone: '',
-    gender: 'Male',
-    employeeId: ''
-  })
+  const [user, setUser] = useState(() => toProfileState(authUser))
 
   useEffect(() => {
-    loadUserData()
-  }, [authUser])
-
-  const loadUserData = async () => {
-    try {
-      setLoading(true)
-      if (authUser) {
-        const userData = await fetchCurrentUser()
-        const target = userData || authUser
-        if (target) {
-          setUser({
-            name: target.name || 'Harsimar Singh',
-            email: target.email || 'simar87@gmail.com',
-            role: target.role || 'Faculty',
-            department: target.department || 'MCA',
-            phone: target.phoneNumber || target.phone || '',
-            employeeId: target.employeeId || '',
-            gender: target.gender || 'Male',
-            qualification: target.qualification || '',
-            specialization: target.specialization || '',
-            joiningDate: target.joiningDate || '2026-07-27'
-          })
-          if (target.profileImage) {
-            setProfileImage(target.profileImage)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error)
-    } finally {
-      setLoading(false)
+    if (!authUser) return
+    setUser(toProfileState(authUser))
+    if (authUser.profileImage) {
+      setProfileImage(authUser.profileImage)
     }
-  }
+  }, [authUser])
 
   const showMessage = (type, text) => {
     setMessage({ type, text })
@@ -200,7 +173,7 @@ export default function Profile() {
     }
   }
 
-  const EditableField = ({ label, value, field, type = 'text', placeholder = 'Not added' }) => {
+  const EditableField = ({ label, value, field, type = 'text', placeholder = 'Not added', readOnly = false }) => {
     const inputRef = useRef(null)
     const [inputValue, setInputValue] = useState(value ?? '')
 
@@ -230,7 +203,7 @@ export default function Profile() {
         <div style={{ flex: 1, marginRight: '16px', minWidth: 0 }}>
           <div style={{
             color: C.gold600,
-            fontSize: '11px',
+            fontSize: '12.5px',
             fontWeight: 700,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
@@ -274,7 +247,7 @@ export default function Profile() {
             </div>
           )}
         </div>
-        <button
+        {!readOnly && <button
           type="button"
           onClick={() => {
             if (isEditing) saveField(field, inputValue)
@@ -287,7 +260,7 @@ export default function Profile() {
             background: isEditing ? C.gold500 : '#FFFFFF',
             color: isEditing ? '#FFFFFF' : C.navy950,
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: '13px',
             fontWeight: 600,
             whiteSpace: 'nowrap',
             transition: 'all 0.15s ease',
@@ -295,7 +268,7 @@ export default function Profile() {
           }}
         >
           {isEditing ? 'Save' : 'Edit'}
-        </button>
+        </button>}
       </div>
     )
   }
@@ -326,7 +299,7 @@ export default function Profile() {
               <span style={{
                 background: C.navy950,
                 color: 'white',
-                fontSize: '9.5px',
+                fontSize: '12px',
                 fontWeight: 800,
                 padding: '2.5px 6px',
                 borderRadius: '4px',
@@ -335,7 +308,7 @@ export default function Profile() {
                 JIMS
               </span>
               <span style={{
-                fontSize: '11px',
+                fontSize: '12.5px',
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -355,7 +328,7 @@ export default function Profile() {
               My Profile
             </h2>
           </div>
-          <div style={{ color: C.navy950, fontSize: 12.5, fontWeight: 500 }}>
+          <div style={{ color: C.navy950, fontSize: 13.5, fontWeight: 500 }}>
             Dashboard <span style={{ color: C.gold500, fontWeight: 700, margin: '0 2px' }}>/</span> <span style={{ color: C.gold500, fontWeight: 600 }}>Profile</span>
           </div>
         </div>
@@ -369,7 +342,7 @@ export default function Profile() {
             color: C.gold600,
             padding: '6px 14px',
             borderRadius: 999,
-            fontSize: 12.5,
+            fontSize: 13.5,
             fontWeight: 600,
             marginBottom: 16
           }}>
@@ -394,19 +367,6 @@ export default function Profile() {
           </div>
         )}
 
-        {loading ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '72px 20px',
-            background: C.card,
-            border: `1px solid ${C.line}`,
-            boxShadow: shadowSoft,
-            borderRadius: '16px'
-          }}>
-            <div style={{ fontSize: '36px', marginBottom: '12px', animation: 'spin 1.5s linear infinite' }}>⏳</div>
-            <div style={{ color: C.navy800, fontSize: '15px', fontWeight: 600 }}>Loading profile details...</div>
-          </div>
-        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
             {/* CARD 1: Personal Information */}
@@ -481,7 +441,7 @@ export default function Profile() {
                       cursor: 'pointer',
                       display: 'grid',
                       placeItems: 'center',
-                      fontSize: '12px',
+                      fontSize: '13px',
                       color: C.navy950,
                       transition: 'transform 0.15s ease'
                     }}
@@ -507,7 +467,7 @@ export default function Profile() {
                   <div style={{ padding: '14px 0', minHeight: '62px', boxSizing: 'border-box' }}>
                     <div style={{
                       color: C.gold600,
-                      fontSize: '11px',
+                      fontSize: '12.5px',
                       fontWeight: 700,
                       letterSpacing: '0.06em',
                       textTransform: 'uppercase',
@@ -582,17 +542,21 @@ export default function Profile() {
                 <div>
                   <EditableField label="Role" value={formatRole(user.role)} field="role" placeholder="Not added" />
                   <EditableField label="Specialization" value={user.specialization} field="specialization" placeholder="Not added" />
-                  <EditableField label="Experience" value={calculateExperience(user.joiningDate)} field="joiningDate" type="date" placeholder="Not added" />
+                  <EditableField label="Experience" value={user.joiningDate ? calculateExperience(user.joiningDate) : ''} field="experience" placeholder="Not added" readOnly />
                 </div>
               </div>
             </div>
 
           </div>
-        )}
       </div>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap');
+        @media (max-width: 600px) {
+          .profile-page { padding: 20px 14px 40px !important; }
+          .profile-page .card-box { padding: 20px 16px !important; }
+          .profile-page .prof-grid { grid-template-columns: minmax(0, 1fr) !important; }
+        }
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }

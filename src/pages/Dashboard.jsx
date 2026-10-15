@@ -1,8 +1,23 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import AreaChart from '../components/AreaChart'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests, getAllUsers } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
+
+const HISTORY_PAGE_SIZE = 5
+
+const formatDisplayDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const formatRoleName = (role) => role
+  ? role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  : '-'
 
 // ===== JIMS Corporate Theme Tokens =====
 const C = {
@@ -68,6 +83,7 @@ export default function Dashboard(){
 
   const teacherRoles = ['faculty', 'coordinator', 'chief_coordinator']
   const managerRoles = ['principal', 'management']
+  const canListUsers = ['coordinator', 'chief_coordinator', 'principal'].includes(user?.role)
   const allTeachers = teacherUsers.filter((u) => ['faculty', 'coordinator', 'chief_coordinator', 'principal'].includes(u.role))
   const totalTeachers = allTeachers.length
   // For management/principal we show aggregated approved leaves
@@ -93,7 +109,7 @@ export default function Dashboard(){
       leaveType: leave?.leaveType || leave?.type || 'Leave',
       fromDate: leave?.startDate,
       toDate: leave?.endDate,
-      days: leave?.numberOfDays || leave?.days || 1
+      days: leave ? formatLeaveDays(leave) : '-'
     }
   })
 
@@ -165,10 +181,20 @@ export default function Dashboard(){
       setAttendanceError(null)
 
       try {
-        const [leaves, users] = await Promise.all([getLeaveRequests(), getAllUsers()])
+        // Faculty are not allowed to list users, so a failed user lookup must not hide their leaves
+        const [leavesResult, usersResult] = await Promise.allSettled([
+          getLeaveRequests(),
+          canListUsers ? getAllUsers() : Promise.resolve([])
+        ])
         if (!active) return
-        setLeaveRecords(leaves || [])
-        setTeacherUsers(users || [])
+        if (leavesResult.status === 'fulfilled') {
+          setLeaveRecords(leavesResult.value || [])
+        } else {
+          setAttendanceError(leavesResult.reason?.message || 'Unable to load attendance data')
+        }
+        if (usersResult.status === 'fulfilled') {
+          setTeacherUsers(usersResult.value || [])
+        }
       } catch (err) {
         if (!active) return
         setAttendanceError(err.message || 'Unable to load attendance data')
@@ -192,7 +218,7 @@ export default function Dashboard(){
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [])
+  }, [canListUsers])
 
   const [profileImage, setProfileImage] = React.useState(null)
   const [selectedType, setSelectedType] = useState('all')
@@ -201,114 +227,42 @@ export default function Dashboard(){
   const [selectedTeacher, setSelectedTeacher] = useState(null)
 
 
-  const [leaveHistory] = useState([
-    {
-      id: 1,
-      dates: '23 Oct - 24 Oct 2025',
-      days: '2 Days',
-      type: 'Earned Leave',
-      requestDate: '29 Sep 2025',
-      status: 'Approved',
-      approver: 'Amit Bora',
-      requestedBy: 'Himanshu Gola',
-      actionOn: '06 Oct 2025',
-      note: 'Taking leave for family commitment'
-    },
-    {
-      id: 2,
-      dates: '01 Oct 2025',
-      days: '1 Day',
-      type: 'Floater Leave',
-      requestDate: '24 Sep 2025',
-      status: 'Approved',
-      approver: 'Amit Bora',
-      requestedBy: 'Himanshu Gola',
-      actionOn: '25 Sep 2025',
-      note: 'Floater Leave'
-    },
-    {
-      id: 3,
-      dates: '26 Sept 2025',
-      days: '1 Day',
-      type: 'Sick Leave',
-      requestDate: '26 Sep 2025',
-      status: 'Approved',
-      approver: 'Amit Bora',
-      requestedBy: 'Himanshu Gola',
-      actionOn: '29 Sep 2025',
-      note: 'Not well today'
-    }
-    ,
-    {
-      id: 4,
-      dates: '12 Nov 2025',
-      days: '1 Day',
-      type: 'Earned Leave',
-      requestDate: '01 Nov 2025',
-      status: 'Approved',
-      approver: 'Amit Bora',
-      requestedBy: 'Kritika Yadav',
-      actionOn: '05 Nov 2025',
-      note: 'Personal work'
-    },
-    {
-      id: 5,
-      dates: '03 Dec 2025',
-      days: '2 Days',
-      type: 'Floater Leave',
-      requestDate: '20 Nov 2025',
-      status: 'Pending',
-      approver: '',
-      requestedBy: 'Aditya Singh',
-      actionOn: '',
-      note: 'Attending a short course'
-    },
-    {
-      id: 6,
-      dates: '18 Oct 2025',
-      days: '1 Day',
-      type: 'Sick Leave',
-      requestDate: '17 Oct 2025',
-      status: 'Rejected',
-      approver: 'Amit Bora',
-      requestedBy: 'Harsimar',
-      actionOn: '18 Oct 2025',
-      note: 'Not well'
-    },
-    {
-      id: 7,
-      dates: '05 Jan 2026',
-      days: '3 Days',
-      type: 'Marriage Leave',
-      requestDate: '20 Dec 2025',
-      status: 'Approved',
-      approver: 'Amit Bora',
-      requestedBy: 'Manan Kumar',
-      actionOn: '28 Dec 2025',
-      note: 'Family event'
-    },
-    {
-      id: 8,
-      dates: '22 Feb 2026',
-      days: '1 Day',
-      type: 'Unpaid Leave',
-      requestDate: '10 Feb 2026',
-      status: 'Pending',
-      approver: '',
-      requestedBy: 'Rohit Sharma',
-      actionOn: '',
-      note: 'Personal'
-    }
-  ])
+  const [selectedLeave, setSelectedLeave] = useState(null)
+  const [historyPage, setHistoryPage] = useState(1)
+
+  const leaveHistory = useMemo(() => (
+    [...leaveRecords]
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .map((leave) => {
+        const ownLeave = (leave.user?.id || leave.userId) === user?.id
+        return {
+          id: leave.id,
+          leave,
+          dates: !leave.endDate || leave.startDate === leave.endDate
+            ? formatDisplayDate(leave.startDate)
+            : `${formatDisplayDate(leave.startDate)} - ${formatDisplayDate(leave.endDate)}`,
+          days: formatLeaveDays(leave),
+          type: leave.leaveType || 'Leave',
+          requestDate: formatDisplayDate(leave.createdAt),
+          status: leave.status || 'Pending',
+          approver: leave.approverName || leave.approver?.name || '',
+          requestedBy: leave.user?.name || (ownLeave ? user?.name : '') || 'Unknown',
+          actionOn: leave.actionDate ? formatDisplayDate(leave.actionDate) : '-',
+          note: leave.reason || '-'
+        }
+      })
+  ), [leaveRecords, user?.id, user?.name])
+
+  const leaveTypeOptions = useMemo(
+    () => [...new Set(leaveHistory.map((item) => item.type))].sort(),
+    [leaveHistory]
+  )
 
   React.useEffect(() => {
     if (user?.profileImage) {
       setProfileImage(user.profileImage)
     }
   }, [user])
-
-  // filteredLeaves is derived from leaveHistory + filters
-  const [filteredLeaves, setFilteredLeaves] = useState(leaveHistory)
 
   const handleViewDetails = (teacher) => {
     setSelectedTeacher(teacher)
@@ -318,23 +272,34 @@ export default function Dashboard(){
     setSelectedTeacher(null)
   }
 
-  useEffect(() => {
-    const t = selectedType
-    const s = selectedStatus
+  const filteredLeaves = useMemo(() => {
     const q = searchText.trim().toLowerCase()
-
-    const results = leaveHistory.filter(item => {
-      if (t !== 'all' && item.type !== t) return false
-      if (s !== 'all' && item.status.toLowerCase() !== s.toLowerCase()) return false
+    return leaveHistory.filter(item => {
+      if (selectedType !== 'all' && item.type !== selectedType) return false
+      if (selectedStatus !== 'all' && item.status.toLowerCase() !== selectedStatus.toLowerCase()) return false
       if (q) {
-        const hay = [item.type, item.requestedBy, item.note, item.approver, item.dates, item.actionOn, item.requestDate].join(' ').toLowerCase()
+        const hay = [item.type, item.requestedBy, item.note, item.approver, item.dates, item.actionOn, item.requestDate, item.status].join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-
-    setFilteredLeaves(results)
   }, [selectedType, selectedStatus, searchText, leaveHistory])
+
+  useEffect(() => {
+    setHistoryPage(1)
+  }, [selectedType, selectedStatus, searchText])
+
+  const totalHistoryPages = Math.max(1, Math.ceil(filteredLeaves.length / HISTORY_PAGE_SIZE))
+  const currentHistoryPage = Math.min(historyPage, totalHistoryPages)
+  const historyStart = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE
+  const pagedLeaves = filteredLeaves.slice(historyStart, historyStart + HISTORY_PAGE_SIZE)
+
+  useEffect(() => {
+    if (!selectedLeave) return
+    const handleKey = (e) => { if (e.key === 'Escape') setSelectedLeave(null) }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [selectedLeave])
 
   return (
     <div className="dashboard-layout" style={{
@@ -342,6 +307,7 @@ export default function Dashboard(){
       minHeight: '100vh',
       padding: '28px',
       position: 'relative',
+      overflow: 'hidden',
       fontFamily: "'Inter', sans-serif",
       color: C.ink900
     }}>
@@ -387,13 +353,13 @@ export default function Dashboard(){
               flexShrink: 0,
               color: C.gold600,
               fontWeight: 700,
-              fontSize: 12,
+              fontSize: 13,
               letterSpacing: '.12em'
             }}>
               J
             </div>
             <span style={{
-              fontSize: 11,
+              fontSize: 12.5,
               fontWeight: 700,
               letterSpacing: '.14em',
               textTransform: 'uppercase',
@@ -403,7 +369,7 @@ export default function Dashboard(){
             </span>
           </div>
           <div>
-            <h2 style={{
+            <h2 className="dashboard-welcome" style={{
               ...serif,
               margin: 0,
               fontSize: 36,
@@ -501,7 +467,7 @@ export default function Dashboard(){
               <p className="profile-role" style={{
                 margin: '6px 0',
                 color: C.navy800,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: 700,
                 letterSpacing: '.07em',
                 textTransform: 'uppercase',
@@ -590,7 +556,7 @@ export default function Dashboard(){
               <div style={{ position: 'relative' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 8, marginBottom: 10 }}>
                 {dayNames.map((day) => (
-                  <div key={day} style={{ fontSize: 10.5, fontWeight: 700, textAlign: 'center', color: C.ink400, letterSpacing: '.06em', textTransform: 'uppercase' }}>{day}</div>
+                  <div key={day} style={{ fontSize: 12, fontWeight: 700, textAlign: 'center', color: C.ink400, letterSpacing: '.06em', textTransform: 'uppercase' }}>{day}</div>
                 ))}
               </div>
 
@@ -651,7 +617,7 @@ export default function Dashboard(){
                   color: '#F4F5F7',
                   zIndex: 10
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.gold500, marginBottom: 8 }}>{formatCalendarDate(hoveredDate.date)}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.gold500, marginBottom: 8 }}>{formatCalendarDate(hoveredDate.date)}</div>
                   {isTeacherView ? (
                     <div style={{ display: 'grid', gap: 8, fontSize: 13, color: '#E2E8F0' }}>
                       {hoveredDate.approvedCount > 0 && <div style={{ fontWeight: 700, color: C.gold500 }}>Taken ({hoveredDate.approvedCount})</div>}
@@ -694,14 +660,14 @@ export default function Dashboard(){
                   <h3 style={{ ...serif, margin: 0, fontSize: 17, fontWeight: 700, color: C.navy950 }}>Today's Attendance</h3>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ padding: '5px 10px', borderRadius: 999, background: C.gold100, color: C.gold600, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Live</span>
+                  <span style={{ padding: '5px 10px', borderRadius: 999, background: C.gold100, color: C.gold600, fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>Live</span>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gap: 10 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                   <div style={{ padding: '12px 14px', borderRadius: 9, background: C.paper, border: `1px solid ${C.line}` }}>
-                    <div style={{ color: C.ink400, fontSize: 12 }}>Date</div>
+                    <div style={{ color: C.ink400, fontSize: 13 }}>Date</div>
                     <div style={{ ...serif, fontSize: 15, fontWeight: 600, color: C.navy950 }}>{formatCalendarDate(todayAttendance.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 8 }}>
@@ -737,7 +703,7 @@ export default function Dashboard(){
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px' }}>
+            <div className="absent-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px' }}>
               <div style={{ background: C.paper, borderRadius: '11px', padding: '20px', border: `1px solid ${C.line}` }}>
                 <div style={{ color: C.ink400, fontSize: 13, marginBottom: 8 }}>Today</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: C.navy800 }}>{absentTeachers.length}</div>
@@ -780,7 +746,7 @@ export default function Dashboard(){
                 <div key={teacher.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', padding: '15px 16px', background: C.card, borderRadius: '10px', border: `1px solid ${C.line}` }}>
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: C.navy950 }}>{teacher.name}</div>
-                    <div style={{ fontSize: 12.5, color: C.ink400, marginTop: 4 }}>{teacher.department}</div>
+                    <div style={{ fontSize: 13.5, color: C.ink400, marginTop: 4 }}>{teacher.department}</div>
                   </div>
                   <button
                     onClick={() => handleViewDetails(teacher)}
@@ -791,7 +757,7 @@ export default function Dashboard(){
                       background: C.gold100,
                       color: C.navy900,
                       fontWeight: 600,
-                      fontSize: 12.5,
+                      fontSize: 13.5,
                       cursor: 'pointer'
                     }}
                   >
@@ -807,7 +773,7 @@ export default function Dashboard(){
                 <button
                   onClick={clearSelection}
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: C.ink400,
                     background: 'transparent',
                     border: 'none',
@@ -821,27 +787,27 @@ export default function Dashboard(){
                 <div style={{ display: 'grid', gap: '12px', color: C.ink600 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <div style={{ fontSize: 12.5, color: C.ink400 }}>Teacher Name</div>
+                      <div style={{ fontSize: 13.5, color: C.ink400 }}>Teacher Name</div>
                       <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.name}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 12.5, color: C.ink400 }}>Leave Type</div>
+                      <div style={{ fontSize: 13.5, color: C.ink400 }}>Leave Type</div>
                       <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.leaveType}</div>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <div style={{ fontSize: 12.5, color: C.ink400 }}>From Date</div>
-                      <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.fromDate}</div>
+                      <div style={{ fontSize: 13.5, color: C.ink400 }}>From Date</div>
+                      <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{formatDisplayDate(selectedTeacher.fromDate)}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 12.5, color: C.ink400 }}>To Date</div>
-                      <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.toDate}</div>
+                      <div style={{ fontSize: 13.5, color: C.ink400 }}>To Date</div>
+                      <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{formatDisplayDate(selectedTeacher.toDate)}</div>
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12.5, color: C.ink400 }}>Total Leave Days</div>
-                    <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.days} day(s)</div>
+                    <div style={{ fontSize: 13.5, color: C.ink400 }}>Total Leave Days</div>
+                    <div style={{ fontWeight: 700, marginTop: 4, color: C.navy950 }}>{selectedTeacher.days}</div>
                   </div>
                 </div>
               ) : (
@@ -858,7 +824,7 @@ export default function Dashboard(){
           <h3 className="card-title" style={{ ...serif, fontSize: 22, marginBottom: 22, color: C.navy950, fontWeight: 700 }}>Leave History</h3>
           
           {/* Filters */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+          <div className="history-filters" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
             {/* Leave Type Filter */}
             <div style={{ position: 'relative', minWidth: '180px' }}>
               <div style={{ position: 'relative' }}>
@@ -878,12 +844,9 @@ export default function Dashboard(){
                   }}
                 >
                   <option value="all">Leave Type</option>
-                  <option value="Earned Leave">Earned Leave</option>
-                  <option value="Floater Leave">Floater Leave</option>
-                  <option value="Sick Leave">Sick Leave</option>
-                  <option value="Marriage Leave">Marriage Leave</option>
-                  <option value="Paternity Leave">Paternity Leave</option>
-                  <option value="Special Leave">Special Leave</option>
+                  {leaveTypeOptions.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
                 </select>
                 <div style={{ 
                   position: 'absolute',
@@ -892,7 +855,7 @@ export default function Dashboard(){
                   transform: 'translateY(-50%)',
                   pointerEvents: 'none',
                   color: C.ink400,
-                  fontSize: 11
+                  fontSize: 12.5
                 }}>▼</div>
               </div>
             </div>
@@ -916,6 +879,7 @@ export default function Dashboard(){
                   }}
                 >
                   <option value="all">Status</option>
+                  <option value="Pending">Pending</option>
                   <option value="Approved">Approved</option>
                   <option value="Rejected">Rejected</option>
                   <option value="Cancelled">Cancelled</option>
@@ -927,7 +891,7 @@ export default function Dashboard(){
                   transform: 'translateY(-50%)',
                   pointerEvents: 'none',
                   color: C.ink400,
-                  fontSize: 11
+                  fontSize: 12.5
                 }}>▼</div>
               </div>
             </div>
@@ -956,18 +920,24 @@ export default function Dashboard(){
             <table className="leave-history-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Dates</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Type</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Requested By</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Action Taken On</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Note</th>
-                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 12, letterSpacing: '.03em', textTransform: 'uppercase' }}>Actions</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Dates</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Type</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Requested By</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Action Taken On</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Note</th>
+                  <th style={{ padding: '12px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, color: C.navy950, fontWeight: 700, fontSize: 13, letterSpacing: '.03em', textTransform: 'uppercase' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {(filteredLeaves.length > 0 ? filteredLeaves : leaveHistory).map((leave, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${C.line}` }}>
+                {pagedLeaves.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '28px 12px', textAlign: 'center', color: C.ink400, fontSize: 14 }}>
+                      {attendanceLoading && leaveHistory.length === 0 ? 'Loading leave history...' : 'No leave records found.'}
+                    </td>
+                  </tr>
+                ) : pagedLeaves.map((leave) => (
+                  <tr key={leave.id} style={{ borderBottom: `1px solid ${C.line}` }}>
                     <td style={{ padding: '16px 12px' }}>
                       <div style={{ fontWeight: 600, color: C.ink900 }}>{leave.dates}</div>
                       <div style={{ fontSize: '13px', color: C.ink400, marginTop: '4px' }}>{leave.days}</div>
@@ -978,22 +948,28 @@ export default function Dashboard(){
                     </td>
                     <td style={{ padding: '16px 12px' }}>
                       <div style={{ color: statusColor(leave.status), fontWeight: 600 }}>{leave.status}</div>
-                      <div style={{ fontSize: '13px', color: C.ink400, marginTop: '4px' }}>by {leave.approver}</div>
+                      {leave.approver && (
+                        <div style={{ fontSize: '13px', color: C.ink400, marginTop: '4px' }}>by {leave.approver}</div>
+                      )}
                     </td>
                     <td style={{ padding: '16px 12px', color: C.ink900 }}>{leave.requestedBy}</td>
                     <td style={{ padding: '16px 12px', color: C.ink900 }}>{leave.actionOn}</td>
-                    <td style={{ padding: '16px 12px', color: C.ink900 }}>{leave.note}</td>
+                    <td style={{ padding: '16px 12px', color: C.ink900, maxWidth: 260, wordBreak: 'break-word' }}>{leave.note}</td>
                     <td style={{ padding: '16px 12px' }}>
-                      <button style={{ 
-                        padding: '7px 13px', 
-                        background: C.paper, 
-                        border: `1px solid ${C.line}`, 
-                        borderRadius: '6px',
-                        color: C.navy800,
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}>View</button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLeave(leave.leave)}
+                        style={{ 
+                          padding: '7px 13px', 
+                          background: C.paper, 
+                          border: `1px solid ${C.line}`, 
+                          borderRadius: '6px',
+                          color: C.navy800,
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >View</button>
                     </td>
                   </tr>
                 ))}
@@ -1008,32 +984,161 @@ export default function Dashboard(){
             color: C.ink400,
             fontSize: '13px'
           }}>
-            <div>Showing 1-3 of 3 entries</div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button style={{ 
-                padding: '5px 9px',
-                border: `1px solid ${C.line}`,
-                borderRadius: '6px',
-                background: C.card,
-                cursor: 'pointer',
-                color: C.ink600
-              }}>&lt;</button>
-              <button style={{ 
-                padding: '5px 9px',
-                border: `1px solid ${C.line}`,
-                borderRadius: '6px',
-                background: C.card,
-                cursor: 'pointer',
-                color: C.ink600
-              }}>&gt;</button>
+            <div>
+              {filteredLeaves.length === 0
+                ? 'Showing 0 entries'
+                : `Showing ${historyStart + 1}-${historyStart + pagedLeaves.length} of ${filteredLeaves.length} entries`}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                type="button"
+                aria-label="Previous page"
+                disabled={currentHistoryPage <= 1}
+                onClick={() => setHistoryPage(currentHistoryPage - 1)}
+                style={{ 
+                  padding: '5px 9px',
+                  border: `1px solid ${C.line}`,
+                  borderRadius: '6px',
+                  background: C.card,
+                  cursor: currentHistoryPage <= 1 ? 'not-allowed' : 'pointer',
+                  opacity: currentHistoryPage <= 1 ? 0.5 : 1,
+                  color: C.ink600
+                }}
+              >&lt;</button>
+              <span style={{ color: C.ink600 }}>Page {currentHistoryPage} of {totalHistoryPages}</span>
+              <button
+                type="button"
+                aria-label="Next page"
+                disabled={currentHistoryPage >= totalHistoryPages}
+                onClick={() => setHistoryPage(currentHistoryPage + 1)}
+                style={{ 
+                  padding: '5px 9px',
+                  border: `1px solid ${C.line}`,
+                  borderRadius: '6px',
+                  background: C.card,
+                  cursor: currentHistoryPage >= totalHistoryPages ? 'not-allowed' : 'pointer',
+                  opacity: currentHistoryPage >= totalHistoryPages ? 0.5 : 1,
+                  color: C.ink600
+                }}
+              >&gt;</button>
             </div>
           </div>
         </div>
       </div>
       </div>
+
+      {selectedLeave && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Leave request details"
+          onClick={() => setSelectedLeave(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(11,29,48,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 1000
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: 16,
+              width: '100%',
+              maxWidth: 620,
+              minWidth: 0,
+              boxSizing: 'border-box',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 24px 60px rgba(11,29,48,0.35)',
+              padding: '24px 28px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+              <div>
+                <h3 style={{ ...serif, margin: 0, fontSize: 22, fontWeight: 700, color: C.navy950 }}>{selectedLeave.leaveType || 'Leave'} Request</h3>
+                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700, color: statusColor(selectedLeave.status) }}>{selectedLeave.status || 'Pending'}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedLeave(null)}
+                aria-label="Close details"
+                style={{ border: `1px solid ${C.line}`, background: C.paper, borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: 16, color: C.ink600 }}
+              >✕</button>
+            </div>
+
+            <div className="leave-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
+              {[
+                ['Requested By', selectedLeave.user?.name || user?.name || '-'],
+                ['Email', selectedLeave.user?.email || '-'],
+                ['Role', formatRoleName(selectedLeave.user?.role)],
+                ['Department', selectedLeave.user?.department || '-'],
+                ['From Date', formatDisplayDate(selectedLeave.startDate)],
+                ['To Date', formatDisplayDate(selectedLeave.endDate)],
+                ['Duration', formatLeaveDays(selectedLeave)],
+                ['Half Day', selectedLeave.isHalfDay ? 'Yes' : 'No'],
+                ['Applied On', formatDisplayDate(selectedLeave.createdAt)],
+                ['Action Taken On', selectedLeave.actionDate ? formatDisplayDate(selectedLeave.actionDate) : '-'],
+                [selectedLeave.status === 'Rejected' ? 'Rejected By' : 'Approved By', selectedLeave.approverName || selectedLeave.approver?.name || '-']
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.ink400 }}>{label}</div>
+                  <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600, color: C.ink900, wordBreak: 'break-word' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.ink400 }}>Reason</div>
+              <div style={{ marginTop: 4, fontSize: 15, color: C.ink900, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{selectedLeave.reason || '-'}</div>
+            </div>
+
+            {selectedLeave.rejectionReason && (
+              <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 10, background: C.red100, color: C.red700 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase' }}>Rejection Reason</div>
+                <div style={{ marginTop: 4, fontSize: 15, lineHeight: 1.5 }}>{selectedLeave.rejectionReason}</div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.ink400 }}>Document</div>
+              <div style={{ marginTop: 4, fontSize: 15 }}>
+                {selectedLeave.attachment ? (
+                  <a href={selectedLeave.attachment} target="_blank" rel="noreferrer" style={{ color: C.navy800, fontWeight: 700 }}>View Document</a>
+                ) : (
+                  <span style={{ color: C.ink400 }}>No document attached</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+        .dashboard-layout .table-container { overflow-x: auto; }
+        .dashboard-layout .leave-history-table { min-width: 820px; }
+        @media (max-width: 1400px) {
+          .dashboard-row.top { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important; }
+        }
+        @media (max-width: 1100px) {
+          .absent-teachers-section { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 720px) {
+          .dashboard-layout { padding: 16px !important; }
+          .dashboard-row.top { grid-template-columns: 1fr !important; }
+          .absent-teachers-section, .leave-history-section { padding: 20px !important; }
+          .absent-stats { grid-template-columns: 1fr !important; }
+          .history-filters > div { min-width: 0 !important; max-width: none !important; flex: 1 1 100% !important; }
+          .leave-detail-grid { grid-template-columns: 1fr !important; }
+          .dashboard-welcome { font-size: 28px !important; }
+        }
         @keyframes float {
           0%, 100% { transform: translateY(0) rotate(0deg); }
           50% { transform: translateY(-20px) rotate(5deg); }

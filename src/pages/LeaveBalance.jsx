@@ -419,7 +419,7 @@ export default function LeaveBalance() {
                       e.currentTarget.style.background = `linear-gradient(135deg, ${type.color}15 0%, ${type.color}05 100%)`
                       e.currentTarget.style.transform = 'translateX(0)'
                     }}>
-                      <div style={{color: '#666', marginBottom: 6, fontSize: 12, fontWeight: 600}}>Available</div>
+                      <div style={{color: '#666', marginBottom: 6, fontSize: 13, fontWeight: 600}}>Available</div>
                       <div style={{fontWeight: 700, fontSize: 20, color: type.color}}>{type.available} days</div>
                     </div>
                     <div style={{
@@ -438,7 +438,7 @@ export default function LeaveBalance() {
                       e.currentTarget.style.background = 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
                       e.currentTarget.style.transform = 'translateX(0)'
                     }}>
-                      <div style={{color: '#666', marginBottom: 6, fontSize: 12, fontWeight: 600}}>Consumed</div>
+                      <div style={{color: '#666', marginBottom: 6, fontSize: 13, fontWeight: 600}}>Consumed</div>
                       <div style={{fontWeight: 700, fontSize: 20, color: '#495057'}}>{type.consumed} days</div>
                     </div>
                     {type.quota && (
@@ -458,7 +458,7 @@ export default function LeaveBalance() {
                         e.currentTarget.style.background = 'linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%)'
                         e.currentTarget.style.transform = 'translateX(0)'
                       }}>
-                        <div style={{color: '#666', marginBottom: 6, fontSize: 12, fontWeight: 600}}>Annual Quota</div>
+                        <div style={{color: '#666', marginBottom: 6, fontSize: 13, fontWeight: 600}}>Annual Quota</div>
                         <div style={{fontWeight: 700, fontSize: 18, color: '#dc3545'}}>{type.quota} days</div>
                       </div>
                     )}
@@ -479,7 +479,7 @@ export default function LeaveBalance() {
                         e.currentTarget.style.background = 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)'
                         e.currentTarget.style.transform = 'translateX(0)'
                       }}>
-                        <div style={{color: '#666', marginBottom: 6, fontSize: 12, fontWeight: 600}}>Accrued so far</div>
+                        <div style={{color: '#666', marginBottom: 6, fontSize: 13, fontWeight: 600}}>Accrued so far</div>
                         <div style={{fontWeight: 700, fontSize: 18, color: '#0284c7'}}>{type.accruedSoFar} days</div>
                       </div>
                     )}
@@ -501,7 +501,7 @@ export default function LeaveBalance() {
                         e.currentTarget.style.background = 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)'
                         e.currentTarget.style.transform = 'translateX(0)'
                       }}>
-                        <div style={{color: '#666', marginBottom: 6, fontSize: 12, fontWeight: 600}}>Carry Over</div>
+                        <div style={{color: '#666', marginBottom: 6, fontSize: 13, fontWeight: 600}}>Carry Over</div>
                         <div style={{fontWeight: 700, fontSize: 18, color: '#16a34a'}}>{type.carryOver} days</div>
                       </div>
                     )}

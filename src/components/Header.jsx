@@ -64,7 +64,7 @@ export default function Header({onOpenRequest, onToggleSidebar, sidebarOpen}){
           </div>
         </div>
         <div className="brand-titles" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
+          <span style={{ textTransform: 'uppercase', fontSize: 12, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
             Jagan Institute of Management Studies
           </span>
           <span style={{ fontSize: 19, fontWeight: 800, color: 'white', letterSpacing: '-0.01em', display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -75,7 +75,7 @@ export default function Header({onOpenRequest, onToggleSidebar, sidebarOpen}){
 
       <div className="top-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
 
-        <div style={{ 
+        <div className="top-user" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           gap: 12,
@@ -84,9 +84,9 @@ export default function Header({onOpenRequest, onToggleSidebar, sidebarOpen}){
           borderRadius: 14,
           border: '1px solid rgba(255,255,255,0.12)'
         }}>
-          <div style={{ textAlign: 'right', lineHeight: 1.25 }}>
+          <div className="name-role" style={{ textAlign: 'right', lineHeight: 1.25 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{user?.name || 'User'}</div>
-            <div style={{ fontSize: 10, color: '#F7D780', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#F7D780', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
               {formatRole(user?.role)} · {user?.department || 'Dept.'}
             </div>
           </div>

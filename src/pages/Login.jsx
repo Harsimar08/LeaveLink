@@ -142,7 +142,7 @@ export default function Login() {
       <style>{`
         @media (max-width: 900px) {
           .tto-screen { grid-template-columns: 1fr !important; }
-          .tto-brand { padding: 40px 28px !important; }
+          .tto-brand { padding: 40px 28px !important; position: relative !important; height: auto !important; }
           .tto-headline { font-size: 32px !important; }
           .tto-stats { display: none !important; }
         }
@@ -155,7 +155,10 @@ export default function Login() {
         <aside
           className="tto-brand"
           style={{
-            position: 'relative',
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            alignSelf: 'start',
             background:
               'radial-gradient(60% 50% at 22% 12%, rgba(199,154,58,0.22), transparent 60%), linear-gradient(165deg, #0e1a2e 0%, #0a1220 62%, #060b14 100%)',
             color: COLORS.white,
@@ -210,7 +213,7 @@ export default function Login() {
               </div>
               <div style={{ lineHeight: 1.25 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '0.01em' }}>JAGAN INSTITUTE OF MANAGEMENT STUDIES</div>
-                <div style={{ fontWeight: 500, fontSize: 12, color: COLORS.gold300, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
+                <div style={{ fontWeight: 500, fontSize: 13, color: COLORS.gold300, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
                   Sector 5 · Rohini · Delhi
                 </div>
               </div>
@@ -218,7 +221,7 @@ export default function Login() {
           </div>
 
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: COLORS.gold300, marginBottom: 18 }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: COLORS.gold300, marginBottom: 18 }}>
               Faculty Leave Portal
             </div>
             <h1 className="tto-headline" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 46, lineHeight: 1.08, letterSpacing: '-0.01em', maxWidth: 420, margin: 0 }}>
@@ -232,20 +235,20 @@ export default function Login() {
             <div className="tto-stats" style={{ display: 'flex', gap: 36, marginTop: 52, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>5</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Access roles</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Access roles</div>
               </div>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>1</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Unified portal</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Unified portal</div>
               </div>
               <div>
                 <div style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, color: COLORS.gold300 }}>24/7</div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Live attendance</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>Live attendance</div>
               </div>
             </div>
           </div>
 
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'rgba(255,255,255,0.45)' }}>
+          <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13.5, color: 'rgba(255,255,255,0.45)' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#57c785', boxShadow: '0 0 0 3px rgba(87,199,133,0.18)' }} />
             Systems operational
           </div>
@@ -259,7 +262,7 @@ export default function Login() {
               <p style={{ marginTop: 6, fontSize: 14, color: COLORS.ink600 }}>Select your role, then continue with your JIMS email.</p>
             </div>
 
-            <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
               Select your role
             </span>
 
@@ -327,13 +330,13 @@ export default function Login() {
 
             {selectedRole ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '22px 0', color: COLORS.ink400, fontSize: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '22px 0', color: COLORS.ink400, fontSize: 13 }}>
                   <span style={{ flex: 1, height: 1, background: COLORS.line }} />
                   continue with your credentials
                   <span style={{ flex: 1, height: 1, background: COLORS.line }} />
                 </div>
 
-                <div style={{ background: COLORS.paper, border: `1px dashed ${COLORS.line}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: COLORS.ink600, marginBottom: 20 }}>
+                <div style={{ background: COLORS.paper, border: `1px dashed ${COLORS.line}`, borderRadius: 10, padding: '12px 14px', fontSize: 13.5, color: COLORS.ink600, marginBottom: 20 }}>
                   <strong style={{ color: COLORS.ink900, display: 'block', marginBottom: 2, fontSize: 13 }}>
                     Signing in as {activeRole?.name}
                   </strong>
@@ -342,7 +345,7 @@ export default function Login() {
 
                 <form onSubmit={handleLogin}>
               <div style={{ marginBottom: 16 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
                   Email
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -371,7 +374,7 @@ export default function Login() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 10, display: 'block' }}>
                   Password
                 </span>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -474,7 +477,7 @@ export default function Login() {
               </button>
             </form>
 
-            <p style={{ textAlign: 'center', marginTop: 30, fontSize: 11.5, color: COLORS.ink400, lineHeight: 1.6 }}>
+            <p style={{ textAlign: 'center', marginTop: 30, fontSize: 12.5, color: COLORS.ink400, lineHeight: 1.6 }}>
               By continuing, you agree to the{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Terms of Service</a> and{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Privacy Policy</a> of Jagan Institute of Management Studies.
@@ -491,15 +494,15 @@ export default function Login() {
               }}
             >
               <p style={{ color: COLORS.ink900, fontSize: 13, fontWeight: 700, margin: '0 0 8px 0' }}>Test Credentials</p>
-              <p style={{ color: COLORS.ink600, fontSize: 12, margin: '4px 0' }}>Faculty: faculty@jims.edu / faculty123</p>
-              <p style={{ color: COLORS.ink600, fontSize: 12, margin: '4px 0' }}>Coordinator: coordinator@jims.edu / coord123</p>
-              <p style={{ color: COLORS.ink600, fontSize: 12, margin: '4px 0' }}>Chief: chief@jims.edu / chief123</p>
-              <p style={{ color: COLORS.ink600, fontSize: 12, margin: '4px 0' }}>Principal: principal@jims.edu / principal123</p>
+              <p style={{ color: COLORS.ink600, fontSize: 13, margin: '4px 0' }}>Faculty: faculty@jims.edu / faculty123</p>
+              <p style={{ color: COLORS.ink600, fontSize: 13, margin: '4px 0' }}>Coordinator: coordinator@jims.edu / coord123</p>
+              <p style={{ color: COLORS.ink600, fontSize: 13, margin: '4px 0' }}>Chief: chief@jims.edu / chief123</p>
+              <p style={{ color: COLORS.ink600, fontSize: 13, margin: '4px 0' }}>Principal: principal@jims.edu / principal123</p>
             </div>
           </>
         ) : (
           <>
-            <p style={{ textAlign: 'center', marginTop: 30, fontSize: 11.5, color: COLORS.ink400, lineHeight: 1.6 }}>
+            <p style={{ textAlign: 'center', marginTop: 30, fontSize: 12.5, color: COLORS.ink400, lineHeight: 1.6 }}>
               By continuing, you agree to the{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Terms of Service</a> and{' '}
               <a href="#" style={{ color: COLORS.ink600, textDecoration: 'underline' }}>Privacy Policy</a> of Jagan Institute of Management Studies.

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
 export default function LeaveHistory() {
   const navigate = useNavigate()
@@ -110,7 +111,7 @@ export default function LeaveHistory() {
                     {leave.startDate && leave.endDate ? (
                       <div>
                         <div>{new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>{leave.numberOfDays ?? '-'} day{leave.numberOfDays === 1 ? '' : 's'}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280' }}>{formatLeaveDays(leave)}</div>
                       </div>
                     ) : '-'}
                   </td>

@@ -10,20 +10,20 @@ export default function RequestDrawer({ open, onClose }) {
 
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>From</label>
+            <label style={{ fontSize: 13, color: 'var(--muted)' }}>From</label>
             <input type="date" style={{ display: 'block', width: '100%', padding: 8, marginTop: 6, borderRadius: 6, border: '1px solid var(--border)' }} />
           </div>
           <div style={{ width: 80, textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>0 days</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>0 days</div>
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>To</label>
+            <label style={{ fontSize: 13, color: 'var(--muted)' }}>To</label>
             <input type="date" style={{ display: 'block', width: '100%', padding: 8, marginTop: 6, borderRadius: 6, border: '1px solid var(--border)' }} />
           </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <label style={{ fontSize: 12, color: 'var(--muted)' }}>Select type of leave you want to apply</label>
+          <label style={{ fontSize: 13, color: 'var(--muted)' }}>Select type of leave you want to apply</label>
           <select style={{ display: 'block', width: '100%', padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid var(--border)' }}>
             <option>Select</option>
             <option>Comp Offs - Not Available</option>
@@ -36,12 +36,12 @@ export default function RequestDrawer({ open, onClose }) {
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <label style={{ fontSize: 12, color: 'var(--muted)' }}>Note</label>
+          <label style={{ fontSize: 13, color: 'var(--muted)' }}>Note</label>
           <textarea placeholder="Type here" style={{ display: 'block', width: '100%', padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid var(--border)', minHeight: 120 }} />
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <label style={{ fontSize: 12, color: 'var(--muted)' }}>Notify</label>
+          <label style={{ fontSize: 13, color: 'var(--muted)' }}>Notify</label>
           <input placeholder="Search employee" style={{ display: 'block', width: '100%', padding: 10, marginTop: 6, borderRadius: 6, border: '1px solid var(--border)' }} />
         </div>
 

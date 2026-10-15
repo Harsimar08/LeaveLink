@@ -399,7 +399,7 @@ body {
     border-bottom: 2px solid var(--border);
     color: var(--text-primary);
     font-weight: 700;
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: 0.05em;
     text-transform: uppercase;
 }

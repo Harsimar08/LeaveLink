@@ -325,7 +325,7 @@ export default function Dashboard(){
                 <button
                   onClick={clearSelection}
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: '#6b7280',
                     background: 'transparent',
                     border: 'none',

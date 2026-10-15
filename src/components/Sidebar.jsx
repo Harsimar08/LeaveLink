@@ -20,12 +20,30 @@ export default function Sidebar({open, onClose}){
     return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
   }
 
+  const isManagement = user?.role === 'management'
+  const dashboardPath = isManagement
+    ? '/management-dashboard'
+    : user?.role === 'principal'
+      ? '/principal-dashboard'
+      : '/dashboard'
+
+  const sectionLabelStyle = {
+    textTransform: 'uppercase',
+    letterSpacing: '0.12em',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: 700,
+    paddingLeft: 8,
+    marginBottom: 4
+  }
+
   const navItemStyle = (isActive) => ({
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     padding: '12px 16px',
     borderRadius: 16,
+    fontSize: 15,
     textDecoration: 'none',
     color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.78)',
     background: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
@@ -70,10 +88,10 @@ export default function Sidebar({open, onClose}){
             J
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
               LeaveLink
             </span>
-            <span style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+            <span style={{ fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
               JIMS Faculty Portal
             </span>
           </div>
@@ -130,7 +148,7 @@ export default function Sidebar({open, onClose}){
           <div style={{
             fontWeight: 700, 
             color: 'white', 
-            fontSize: 14,
+            fontSize: 15,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap'
@@ -138,7 +156,7 @@ export default function Sidebar({open, onClose}){
             {user?.name || 'User'}
           </div>
           <div style={{
-            fontSize: 11, 
+            fontSize: 13, 
             color: '#F7D780',
             marginTop: 2,
             fontWeight: 600,
@@ -153,27 +171,33 @@ export default function Sidebar({open, onClose}){
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, overflowY: 'auto' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 700, paddingLeft: 8, marginBottom: 4 }}>Overview</div>
-          <NavLink to="/dashboard" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
+          <div style={sectionLabelStyle}>Overview</div>
+          <NavLink to={dashboardPath} onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
             <span className="icon" style={{fontSize: 18}}>🏠</span>
             Dashboard
           </NavLink>
-          <NavLink to="/profile" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-            <span className="icon" style={{fontSize: 18}}>👤</span>
-            Profile
-          </NavLink>
+          {!isManagement && (
+            <NavLink to="/profile" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
+              <span className="icon" style={{fontSize: 18}}>👤</span>
+              Profile
+            </NavLink>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 700, paddingLeft: 8, marginBottom: 4 }}>Leave Management</div>
-          <NavLink to="/leave-request" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-            <span className="icon" style={{fontSize: 18}}>📄</span>
-            Leave Requests
-          </NavLink>
-          <NavLink to="/leave-history" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-            <span className="icon" style={{fontSize: 18}}>📜</span>
-            Self Leave History
-          </NavLink>
+          <div style={sectionLabelStyle}>Leave Management</div>
+          {!isManagement && (
+            <>
+              <NavLink to="/leave-request" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
+                <span className="icon" style={{fontSize: 18}}>📄</span>
+                Leave Requests
+              </NavLink>
+              <NavLink to="/leave-history" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
+                <span className="icon" style={{fontSize: 18}}>📜</span>
+                Self Leave History
+              </NavLink>
+            </>
+          )}
           {['principal', 'management'].includes(user?.role) && (
             <NavLink to="/approvals" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
               <span className="icon" style={{fontSize: 18}}>✅</span>
@@ -183,7 +207,7 @@ export default function Sidebar({open, onClose}){
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 700, paddingLeft: 8, marginBottom: 4 }}>Institute</div>
+          <div style={sectionLabelStyle}>Institute</div>
           <NavLink to="/holidays" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
             <span className="icon" style={{fontSize: 18}}>📅</span>
             Holidays

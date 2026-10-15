@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests, approveLeave, rejectLeave } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
 export default function ManagementDashboard() {
   const navigate = useNavigate()
@@ -25,10 +26,12 @@ export default function ManagementDashboard() {
       return
     }
 
-    const load = async () => {
-      setLoading(true)
+    let active = true
+    const load = async (showLoading = true) => {
+      if (showLoading) setLoading(true)
       try {
         const all = await getLeaveRequests()
+        if (!active) return
         setAllLeaves(all)
 
         // Filter Principal's leaves
@@ -41,11 +44,16 @@ export default function ManagementDashboard() {
       } catch (err) {
         console.error('Failed to load leaves', err)
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     }
 
     load()
+    const interval = setInterval(() => load(false), 15000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [navigate, isAuthenticated, user])
 
   const handleApprove = async (id) => {
@@ -232,6 +240,7 @@ export default function ManagementDashboard() {
                     <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Dates</th>
                     <th style={{ textAlign: 'center', padding: 16, fontWeight: 600 }}>Days</th>
                     <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Reason</th>
+                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Document</th>
                     <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Actions</th>
                   </tr>
                 </thead>
@@ -240,17 +249,20 @@ export default function ManagementDashboard() {
                     <tr key={l._id || l.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={{ padding: 16 }}>
                         <div style={{ fontWeight: 500 }}>{l.user?.name || 'Principal'}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>{l.user?.email}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280' }}>{l.user?.email}</div>
                       </td>
                       <td style={{ padding: 16 }}>{l.leaveType}</td>
                       <td style={{ padding: 16 }}>
                         {new Date(l.startDate).toLocaleDateString()} → {new Date(l.endDate).toLocaleDateString()}
                       </td>
-                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{l.numberOfDays}</td>
+                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{formatLeaveDays(l)}</td>
+                      <td style={{ padding: 16, fontSize: 14 }}>{l.reason}</td>
                       <td style={{ padding: 16, fontSize: 14 }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {l.reason}
-                        </div>
+                        {l.attachment ? (
+                          <a href={l.attachment} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>View</a>
+                        ) : (
+                          <span style={{ color: '#6b7280' }}>None</span>
+                        )}
                       </td>
                       <td style={{ padding: 16 }}>
                         <button
@@ -329,13 +341,13 @@ export default function ManagementDashboard() {
                     <tr key={l._id || l.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={{ padding: 16 }}>
                         <div style={{ fontWeight: 500 }}>{l.user?.name || 'Principal'}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>{l.user?.email}</div>
+                        <div style={{ fontSize: 13, color: '#6b7280' }}>{l.user?.email}</div>
                       </td>
                       <td style={{ padding: 16 }}>{l.leaveType}</td>
                       <td style={{ padding: 16 }}>
                         {new Date(l.startDate).toLocaleDateString()} → {new Date(l.endDate).toLocaleDateString()}
                       </td>
-                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{l.numberOfDays}</td>
+                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{formatLeaveDays(l)}</td>
                       <td style={{ padding: 16, textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-block',
@@ -343,7 +355,7 @@ export default function ManagementDashboard() {
                           borderRadius: 6,
                           background: getStatusColor(l.status),
                           color: 'white',
-                          fontSize: 12,
+                          fontSize: 13,
                           fontWeight: 500
                         }}>
                           {l.status}
@@ -353,7 +365,7 @@ export default function ManagementDashboard() {
                         {l.approverName ? (
                           <div>
                             <div style={{ fontWeight: 500 }}>{l.approverName}</div>
-                            <div style={{ fontSize: 12, color: '#6b7280' }}>
+                            <div style={{ fontSize: 13, color: '#6b7280' }}>
                               {l.actionDate ? new Date(l.actionDate).toLocaleDateString() : ''}
                             </div>
                           </div>

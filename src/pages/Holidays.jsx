@@ -195,7 +195,7 @@ export default function Holidays() {
 
       {/* Header */}
       <div style={{ marginBottom: 28, maxWidth: 1160, margin: '0 auto 28px' }}>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
           Institute Calendar
         </div>
         <h2 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 600, color: COLORS.ink900 }}>
@@ -216,19 +216,19 @@ export default function Holidays() {
           marginBottom: 20
         }}>
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Total Holidays</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Total Holidays</div>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.ink900 }}>{stats.total}</div>
           </div>
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>National</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>National</div>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.navy800 }}>{stats.national}</div>
           </div>
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Religious</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Religious</div>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.gold500 }}>{stats.religious}</div>
           </div>
           <div style={cardStyle}>
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Long Weekends</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Long Weekends</div>
             <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.success }}>{stats.longWeekends}</div>
           </div>
         </div>
@@ -244,7 +244,7 @@ export default function Holidays() {
           justifyContent: 'space-between'
         }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginRight: 4 }}>Filter</label>
+            <label style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginRight: 4 }}>Filter</label>
             <button onClick={() => setFilterType('all')} style={pillBtn(filterType === 'all', COLORS.navy900)}>All</button>
             <button onClick={() => setFilterType('national')} style={pillBtn(filterType === 'national', COLORS.navy800)}>National</button>
             <button onClick={() => setFilterType('religious')} style={pillBtn(filterType === 'religious', COLORS.gold500)}>Religious</button>
@@ -262,7 +262,7 @@ export default function Holidays() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
+        <div className="tto-holiday-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
           {/* Main Content */}
           <div>
             {viewType === 'calendar' ? (
@@ -341,7 +341,7 @@ export default function Holidays() {
                           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600 }}>
                             {new Date(holiday.date).getDate()}
                           </div>
-                          <div style={{ fontSize: 10.5, opacity: 0.85, letterSpacing: '0.03em' }}>
+                          <div style={{ fontSize: 12, opacity: 0.85, letterSpacing: '0.03em' }}>
                             {monthNames[new Date(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
                           </div>
                         </div>
@@ -349,7 +349,7 @@ export default function Holidays() {
                           <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.ink900, marginBottom: 4 }}>
                             {holiday.name}
                           </div>
-                          <div style={{ fontSize: 12.5, color: COLORS.ink600, display: 'flex', gap: 10, alignItems: 'center' }}>
+                          <div style={{ fontSize: 13.5, color: COLORS.ink600, display: 'flex', gap: 10, alignItems: 'center' }}>
                             <span>{holiday.day}</span>
                             <span style={{ color: COLORS.ink400 }}>•</span>
                             <span style={{
@@ -357,7 +357,7 @@ export default function Holidays() {
                               color: typeColors[holiday.type],
                               padding: '2px 9px',
                               borderRadius: 5,
-                              fontSize: 10.5,
+                              fontSize: 12,
                               fontWeight: 700,
                               textTransform: 'uppercase',
                               letterSpacing: '0.03em',
@@ -407,7 +407,7 @@ export default function Holidays() {
                         <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600 }}>
                           {new Date(holiday.date).getDate()}
                         </div>
-                        <div style={{ fontSize: 9.5, opacity: 0.85 }}>
+                        <div style={{ fontSize: 12, opacity: 0.85 }}>
                           {monthNames[new Date(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
                         </div>
                       </div>
@@ -415,7 +415,7 @@ export default function Holidays() {
                         <div style={{ fontSize: 14.5, fontWeight: 700, color: COLORS.ink900, marginBottom: 2 }}>
                           {holiday.name}
                         </div>
-                        <div style={{ fontSize: 12, color: COLORS.ink600 }}>
+                        <div style={{ fontSize: 13, color: COLORS.ink600 }}>
                           {holiday.day}
                         </div>
                       </div>
@@ -424,7 +424,7 @@ export default function Holidays() {
                         color: typeColors[holiday.type],
                         padding: '4px 11px',
                         borderRadius: 6,
-                        fontSize: 10.5,
+                        fontSize: 12,
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.03em',
@@ -478,7 +478,7 @@ export default function Holidays() {
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink900, marginBottom: 3 }}>
                       {holiday.name}
                     </div>
-                    <div style={{ fontSize: 12, color: COLORS.ink600 }}>
+                    <div style={{ fontSize: 13, color: COLORS.ink600 }}>
                       {new Date(holiday.date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -521,6 +521,9 @@ export default function Holidays() {
 
       <style>{`
         .tto-holiday-row:hover { transform: translateX(4px); }
+        @media (max-width: 900px) {
+          .tto-holiday-layout { grid-template-columns: minmax(0, 1fr) !important; }
+        }
       `}</style>
     </div>
   )

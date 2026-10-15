@@ -19,7 +19,7 @@ export default function Footer(){
       <div>
         © {new Date().getFullYear()} <strong style={{ color: '#F7D780' }}>JIMS LeaveLink</strong> — Faculty Leave Portal
       </div>
-      <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.45)' }}>
+      <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.45)' }}>
         Jagan Institute of Management Studies · All rights reserved
       </div>
     </footer>

@@ -129,10 +129,16 @@ export default function LeaveRequest() {
   // Update selected leave info
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : type === 'file' ? files[0] : value
-    }));
+    setFormData(prev => {
+      const next = {
+        ...prev,
+        [name]: type === 'checkbox' ? checked : type === 'file' ? files[0] : value
+      };
+      if (next.halfDay && (name === 'halfDay' || name === 'startDate')) {
+        next.endDate = next.startDate;
+      }
+      return next;
+    });
     // Clear error for this field
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
@@ -160,14 +166,16 @@ export default function LeaveRequest() {
         // Prepare leave request data for API
         // Backend expects: leaveType, startDate, endDate, numberOfDays, reason, attachment (optional)
         const leaveTypeName = leaveTypeLabels[formData.leaveType] || formData.leaveType
+        const endDate = formData.halfDay ? formData.startDate : formData.endDate
         let leaveRequestData
         if (formData.attachments) {
           const form = new FormData()
           form.append('leaveType', leaveTypeName)
           form.append('reason', formData.reason)
           form.append('startDate', formData.startDate)
-          form.append('endDate', formData.endDate)
+          form.append('endDate', endDate)
           form.append('numberOfDays', calculatedDays)
+          form.append('halfDay', formData.halfDay ? 'true' : 'false')
           form.append('attachment', formData.attachments)
           leaveRequestData = form
         } else {
@@ -175,8 +183,9 @@ export default function LeaveRequest() {
             leaveType: leaveTypeName,
             reason: formData.reason,
             startDate: formData.startDate,
-            endDate: formData.endDate,
+            endDate,
             numberOfDays: calculatedDays,
+            halfDay: formData.halfDay,
             attachment: null
           }
         }
@@ -239,7 +248,7 @@ export default function LeaveRequest() {
     fontWeight: 600,
     marginBottom: 8,
     color: COLORS.ink600,
-    fontSize: 12,
+    fontSize: 13,
     letterSpacing: '0.03em',
     textTransform: 'uppercase',
   };
@@ -256,6 +265,9 @@ export default function LeaveRequest() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes tto-spin-kf { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .tto-spin { animation: tto-spin-kf 0.9s linear infinite; }
+        @media (max-width: 520px) {
+          .tto-date-grid { grid-template-columns: minmax(0, 1fr) !important; }
+        }
         .tto-field:focus { border-color: ${COLORS.navy700} !important; box-shadow: 0 0 0 3px rgba(21,39,66,0.10); }
         .tto-row:hover { transform: translateX(3px); }
       `}</style>
@@ -263,7 +275,7 @@ export default function LeaveRequest() {
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
             Leave Management
           </div>
           <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32, color: COLORS.ink900, margin: 0 }}>
@@ -354,7 +366,7 @@ export default function LeaveRequest() {
                   );
                 })}
               </div>
-              {errors.leaveType && <div style={{ color: COLORS.danger, fontSize: 12.5, marginTop: 8 }}>{errors.leaveType}</div>}
+              {errors.leaveType && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.leaveType}</div>}
             </div>
 
             <div style={{ marginBottom: 24 }}>
@@ -368,11 +380,11 @@ export default function LeaveRequest() {
                 rows="4"
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
               />
-              {errors.reason && <div style={{ color: COLORS.danger, fontSize: 12.5, marginTop: 8 }}>{errors.reason}</div>}
+              {errors.reason && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.reason}</div>}
             </div>
 
             {/* Dates */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+            <div className="tto-date-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
               <div>
                 <label style={labelStyle}>Start Date *</label>
                 <input
@@ -384,7 +396,7 @@ export default function LeaveRequest() {
                   style={inputStyle}
                   min={new Date().toISOString().split('T')[0]}
                 />
-                {errors.startDate && <div style={{ color: COLORS.danger, fontSize: 12.5, marginTop: 8 }}>{errors.startDate}</div>}
+                {errors.startDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.startDate}</div>}
               </div>
               <div>
                 <label style={labelStyle}>End Date *</label>
@@ -394,10 +406,11 @@ export default function LeaveRequest() {
                   name="endDate"
                   value={formData.endDate}
                   onChange={handleChange}
-                  style={inputStyle}
+                  disabled={formData.halfDay}
+                  style={{ ...inputStyle, ...(formData.halfDay ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
                   min={formData.startDate || new Date().toISOString().split('T')[0]}
                 />
-                {errors.endDate && <div style={{ color: COLORS.danger, fontSize: 12.5, marginTop: 8 }}>{errors.endDate}</div>}
+                {errors.endDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.endDate}</div>}
               </div>
             </div>
 
@@ -409,7 +422,7 @@ export default function LeaveRequest() {
               }}>
                 <span style={{ fontSize: 13, color: COLORS.ink600, fontWeight: 600 }}>Duration requested</span>
                 <span style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: COLORS.navy900 }}>
-                  {calculatedDays} {calculatedDays === 1 ? 'day' : 'days'}
+                  {formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`}
                 </span>
               </div>
             )}
@@ -472,7 +485,7 @@ export default function LeaveRequest() {
                 <div style={{ color: COLORS.ink900, fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>
                   {formData.attachments ? formData.attachments.name : 'Click to upload or drag and drop'}
                 </div>
-                <div style={{ color: COLORS.ink400, fontSize: 12 }}>
+                <div style={{ color: COLORS.ink400, fontSize: 13 }}>
                   PDF, DOC, JPG up to 10MB
                 </div>
                 <input
@@ -538,7 +551,7 @@ export default function LeaveRequest() {
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
               {recentRequests.map((request) => {
-                const status = statusStyles[request.status] || statusStyles.pending;
+                const status = statusStyles[(request.status || '').toLowerCase()] || statusStyles.pending;
                 const days = request.numberOfDays ?? request.days ?? 0;
                 return (
                   <div
@@ -559,14 +572,14 @@ export default function LeaveRequest() {
                       <div style={{ fontWeight: 700, color: COLORS.ink900, marginBottom: 4, fontSize: 13.5 }}>
                         {request.leaveType}
                       </div>
-                      <div style={{ fontSize: 12.5, color: COLORS.ink600 }}>
-                        {new Date(request.startDate).toLocaleDateString()} to {new Date(request.endDate).toLocaleDateString()} ({days} {days === 1 ? 'day' : 'days'})
+                      <div style={{ fontSize: 13.5, color: COLORS.ink600 }}>
+                        {new Date(request.startDate).toLocaleDateString()} to {new Date(request.endDate).toLocaleDateString()} ({request.isHalfDay ? '0.5 day, Half day' : `${days} ${days === 1 ? 'day' : 'days'}`})
                       </div>
                     </div>
                     <div style={{
                       padding: '5px 13px',
                       borderRadius: 20,
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: 700,
                       background: status.bg,
                       color: status.color,

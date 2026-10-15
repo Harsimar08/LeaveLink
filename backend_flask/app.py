@@ -4,7 +4,7 @@ from datetime import timedelta
 import os
 import ssl
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
@@ -325,6 +325,28 @@ def health():
             'error': str(e)
         }), 500
 
+def migrate_leave_half_day_columns():
+    """create_all() never alters existing tables, so older databases need these columns upgraded."""
+    columns = {col['name']: col for col in inspect(db.engine).get_columns('leaves')}
+    dialect = db.engine.dialect.name
+    statements = []
+
+    if 'is_half_day' not in columns:
+        statements.append('ALTER TABLE leaves ADD COLUMN is_half_day BOOLEAN NOT NULL DEFAULT FALSE')
+
+    days_type = str(columns.get('number_of_days', {}).get('type', '')).upper()
+    if 'INT' in days_type:
+        if dialect == 'postgresql':
+            statements.append('ALTER TABLE leaves ALTER COLUMN number_of_days TYPE DOUBLE PRECISION')
+        elif dialect == 'mysql':
+            statements.append('ALTER TABLE leaves MODIFY number_of_days DOUBLE NOT NULL')
+
+    if statements:
+        with db.engine.begin() as conn:
+            for statement in statements:
+                conn.execute(text(statement))
+        print(f'[DB] Migrated leaves table: {len(statements)} change(s)')
+
 # Before request hook to guarantee tables exist on serverless cold start
 @app.before_request
 def ensure_database_initialized():
@@ -334,6 +356,7 @@ def ensure_database_initialized():
             from models.leave import Leave
             from models.stored_file import StoredFile
             db.create_all()
+            migrate_leave_half_day_columns()
             app._db_tables_ready = True
             print('[DB] Database tables initialized successfully')
         except Exception as e:

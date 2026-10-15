@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { getLeaveRequests, getAllUsers, approveLeave, rejectLeave } from '../utils/api-auth'
+import { formatLeaveDays } from '../utils/leaveFormat'
+
+const APPROVAL_ROLES = ['chief_coordinator', 'coordinator', 'faculty']
 
 // ===== JIMS Corporate Theme Tokens (shared with Dashboard.jsx) =====
 const C = {
@@ -39,21 +43,55 @@ const kpiCards = [
 export default function PrincipalDashboard(){
   const navigate = useNavigate()
   const { user, isAuthenticated } = useAuth()
-  console.log('PrincipalDashboard render - user:', user);
-  
-  const [institutionStats] = useState({
-    totalFaculty: 45,
-    totalDepartments: 5,
-    totalStudents: 1200,
-    onLeaveToday: 8,
-    pendingApprovals: 3,
-    approvedThisMonth: 45,
-    rejectedThisMonth: 2,
-    averageLeavePerFaculty: 12.5
-  })
+  const [leaves, setLeaves] = useState([])
+  const [users, setUsers] = useState([])
+  const [processingId, setProcessingId] = useState(null)
+
+  const loadData = React.useCallback(async () => {
+    const [leavesResult, usersResult] = await Promise.allSettled([getLeaveRequests(), getAllUsers()])
+    if (leavesResult.status === 'fulfilled') setLeaves(leavesResult.value || [])
+    if (usersResult.status === 'fulfilled') setUsers(usersResult.value || [])
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'principal') return
+    loadData()
+    const interval = setInterval(loadData, 15000)
+    return () => clearInterval(interval)
+  }, [isAuthenticated, user?.role, loadData])
+
+  const today = new Date()
+  const normalizeDate = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const parseDate = (value) => value ? new Date(value.length === 10 ? `${value}T00:00:00` : value) : null
+  const coversDate = (leave, date) => {
+    const start = parseDate(leave.startDate)
+    const end = parseDate(leave.endDate) || start
+    if (!start) return false
+    const target = normalizeDate(date)
+    return target >= normalizeDate(start) && target <= normalizeDate(end)
+  }
+  const isThisMonth = (value) => {
+    const date = parseDate(value)
+    return !!date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth()
+  }
+
+  const facultyUsers = users.filter((u) => APPROVAL_ROLES.includes(u.role))
+  const approvedLeaves = leaves.filter((l) => l.status === 'Approved' && APPROVAL_ROLES.includes(l.user?.role))
+  const absentIdsOn = (date) => new Set(approvedLeaves.filter((l) => coversDate(l, date)).map((l) => l.user?.id || l.userId))
+  const pendingApprovals = leaves
+    .filter((l) => l.status === 'Pending' && l.user?.id !== user?.id && APPROVAL_ROLES.includes(l.user?.role))
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+
+  const institutionStats = {
+    totalFaculty: facultyUsers.length,
+    totalDepartments: new Set(facultyUsers.map((u) => u.department).filter(Boolean)).size,
+    onLeaveToday: absentIdsOn(today).size,
+    pendingApprovals: pendingApprovals.length,
+    approvedThisMonth: leaves.filter((l) => l.status === 'Approved' && isThisMonth(l.actionDate)).length,
+    rejectedThisMonth: leaves.filter((l) => l.status === 'Rejected' && isThisMonth(l.actionDate)).length
+  }
 
   const [hoveredDate, setHoveredDate] = useState(null)
-  const today = new Date()
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getDay()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
@@ -63,13 +101,13 @@ export default function PrincipalDashboard(){
 
   const attendanceData = Array.from({ length: daysInMonth }, (_, idx) => {
     const day = idx + 1
-    const totalTeachers = 25
-    const absentTeachers = 1 + ((day * 3) % 4)
-    const presentTeachers = totalTeachers - absentTeachers
+    const date = new Date(today.getFullYear(), today.getMonth(), day)
+    const totalTeachers = facultyUsers.length
+    const absentTeachers = absentIdsOn(date).size
     return {
       day,
-      date: new Date(today.getFullYear(), today.getMonth(), day),
-      presentTeachers,
+      date,
+      presentTeachers: Math.max(totalTeachers - absentTeachers, 0),
       absentTeachers,
       totalTeachers
     }
@@ -77,6 +115,43 @@ export default function PrincipalDashboard(){
 
   const monthLabel = today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const formatCalendarDate = (date) => date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
+  const formatShortDate = (value) => {
+    const date = parseDate(value)
+    return date ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
+  }
+  const formatDuration = (leave) => {
+    const range = !leave.endDate || leave.startDate === leave.endDate
+      ? formatShortDate(leave.startDate)
+      : `${formatShortDate(leave.startDate)} - ${formatShortDate(leave.endDate)}`
+    return `${range} (${formatLeaveDays(leave)})`
+  }
+
+  const handleApprove = async (id) => {
+    if (!window.confirm('Approve this leave request?')) return
+    try {
+      setProcessingId(id)
+      await approveLeave(id)
+      await loadData()
+    } catch (err) {
+      alert('Approve failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleReject = async (id) => {
+    const reason = window.prompt('Please provide a rejection reason (optional):', '')
+    if (reason === null) return
+    try {
+      setProcessingId(id)
+      await rejectLeave(id, reason || '')
+      await loadData()
+    } catch (err) {
+      alert('Reject failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setProcessingId(null)
+    }
+  }
 
   React.useEffect(() => {
     if (!isAuthenticated || user?.role !== 'principal') {
@@ -106,14 +181,14 @@ export default function PrincipalDashboard(){
             padding: 3,
             boxShadow: `0 0 0 2px ${C.gold100}, 0 2px 6px rgba(11,29,48,0.15)`,
             flexShrink: 0,
-            fontSize: 11,
+            fontSize: 12.5,
             fontWeight: 700,
             color: C.navy950
           }}>
             JIMS
           </div>
           <span style={{
-            fontSize: 11,
+            fontSize: 12.5,
             fontWeight: 700,
             letterSpacing: '.14em',
             textTransform: 'uppercase',
@@ -153,7 +228,7 @@ export default function PrincipalDashboard(){
         }}>
           <div style={{ fontSize: '13px', color: C.ink400, marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>On Leave Today</div>
           <div style={{ ...serif, fontSize: '38px', fontWeight: 700, marginBottom: '4px', color: C.red700 }}>{institutionStats.onLeaveToday}</div>
-          <div style={{ fontSize: '13px', color: C.ink600 }}>{((institutionStats.onLeaveToday/institutionStats.totalFaculty)*100).toFixed(1)}% of total faculty</div>
+          <div style={{ fontSize: '13px', color: C.ink600 }}>{institutionStats.totalFaculty ? ((institutionStats.onLeaveToday/institutionStats.totalFaculty)*100).toFixed(1) : '0.0'}% of total faculty</div>
         </div>
 
         <div style={{
@@ -188,15 +263,15 @@ export default function PrincipalDashboard(){
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ ...serif, margin: 0, fontSize: 19, fontWeight: 700, color: C.navy950 }}>Attendance Calendar</h3>
-            <p style={{ margin: '8px 0 0', color: C.ink400, fontSize: 12.5 }}>Hover over any date to view attendance details.</p>
+            <p style={{ margin: '8px 0 0', color: C.ink400, fontSize: 13.5 }}>Hover over any date to view attendance details.</p>
           </div>
-          <span style={{ padding: '6px 14px', borderRadius: 8, background: C.navy950, color: '#fff', fontSize: 12, fontWeight: 700 }}>{monthLabel}</span>
+          <span style={{ padding: '6px 14px', borderRadius: 8, background: C.navy950, color: '#fff', fontSize: 13, fontWeight: 700 }}>{monthLabel}</span>
         </div>
 
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 8, marginBottom: 10 }}>
             {dayNames.map((day) => (
-              <div key={day} style={{ fontSize: 10.5, fontWeight: 700, textAlign: 'center', color: C.ink400, letterSpacing: '.06em', textTransform: 'uppercase' }}>{day}</div>
+              <div key={day} style={{ fontSize: 12, fontWeight: 700, textAlign: 'center', color: C.ink400, letterSpacing: '.06em', textTransform: 'uppercase' }}>{day}</div>
             ))}
           </div>
 
@@ -246,7 +321,7 @@ export default function PrincipalDashboard(){
               color: '#F4F5F7',
               zIndex: 10
             }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.gold500, marginBottom: 8 }}>{formatCalendarDate(hoveredDate.date)}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.gold500, marginBottom: 8 }}>{formatCalendarDate(hoveredDate.date)}</div>
               <div style={{ fontSize: 13, color: '#E2E8F0', lineHeight: 1.65 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Present Teachers</span><strong>{hoveredDate.presentTeachers}</strong></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Absent Teachers</span><strong>{hoveredDate.absentTeachers}</strong></div>
@@ -265,13 +340,13 @@ export default function PrincipalDashboard(){
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Coordinator</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Count</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>On Leave</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Avg. Leave Days</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Utilization</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Status</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Coordinator</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Count</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>On Leave</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Avg. Leave Days</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Utilization</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -323,7 +398,7 @@ export default function PrincipalDashboard(){
                       <span style={{
                         padding: '5px 12px',
                         borderRadius: '999px',
-                        fontSize: '12px',
+                        fontSize: '13px',
                         fontWeight: 700,
                         background: dept.util > 90 ? C.red100 : C.green100,
                         color: dept.util > 90 ? C.red700 : C.green700
@@ -347,7 +422,7 @@ export default function PrincipalDashboard(){
               background: C.gold100,
               color: C.gold600,
               borderRadius: '999px',
-              fontSize: '12px',
+              fontSize: '13px',
               fontWeight: 700,
               letterSpacing: '.04em',
               textTransform: 'uppercase'
@@ -359,23 +434,28 @@ export default function PrincipalDashboard(){
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Name</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Type</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Duration</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Reason</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '12px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Actions</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Name</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Type</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Duration</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Reason</th>
+                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { faculty: 'Dr. Anand Verma', dept: 'Computer Science', type: 'Medical Leave', duration: '10-15 Nov (5 days)', reason: 'Medical emergency' },
-                  { faculty: user?.fullName || user?.name || 'Faculty Member', dept: user?.department || 'Department', type: 'Personal Leave', duration: '12 Nov (1 day)', reason: 'Personal work' },
-                  { faculty: 'Dr. Meera Singh', dept: 'IT', type: 'Conference', duration: '18-20 Nov (3 days)', reason: 'International conference' }
-                ].map((req, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${C.line}` }}>
-                    <td style={{ padding: '18px 14px', fontWeight: 600, fontSize: '15px', color: C.navy950 }}>{req.faculty}</td>
-                    <td style={{ padding: '18px 14px', color: C.ink600 }}>{req.dept}</td>
+                {pendingApprovals.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ padding: '24px 14px', textAlign: 'center', color: C.ink400, fontSize: '14px' }}>No pending approvals</td>
+                  </tr>
+                ) : pendingApprovals.map((req) => (
+                  <tr key={req.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                    <td style={{ padding: '18px 14px' }}>
+                      <div style={{ fontWeight: 600, fontSize: '15px', color: C.navy950 }}>{req.user?.name || 'Unknown'}</div>
+                      <div style={{ fontSize: '13px', color: C.ink400, marginTop: 2 }}>
+                        {req.user?.role ? req.user.role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : ''}
+                      </div>
+                    </td>
+                    <td style={{ padding: '18px 14px', color: C.ink600 }}>{req.user?.department || '-'}</td>
                     <td style={{ padding: '18px 14px' }}>
                       <span style={{
                         padding: '5px 12px',
@@ -384,39 +464,52 @@ export default function PrincipalDashboard(){
                         fontWeight: 700,
                         background: C.gold100,
                         color: C.gold600
-                      }}>{req.type}</span>
+                      }}>{req.leaveType}</span>
                     </td>
-                    <td style={{ padding: '18px 14px', fontSize: '14px', fontWeight: 500, color: C.ink900 }}>{req.duration}</td>
-                    <td style={{ padding: '18px 14px', color: C.ink600, fontSize: '14px' }}>{req.reason}</td>
+                    <td style={{ padding: '18px 14px', fontSize: '14px', fontWeight: 500, color: C.ink900 }}>{formatDuration(req)}</td>
+                    <td style={{ padding: '18px 14px', color: C.ink600, fontSize: '14px', maxWidth: 280, wordBreak: 'break-word' }}>
+                      <div>{req.reason || '-'}</div>
+                      {req.attachment && (
+                        <a href={req.attachment} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, color: C.navy800, fontWeight: 600, fontSize: '13px' }}>View Document</a>
+                      )}
+                    </td>
                     <td style={{ padding: '18px 14px' }}>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button style={{
-                          padding: '8px 16px',
-                          background: C.green700,
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          transition: 'transform 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                        onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                        <button
+                          disabled={processingId === req.id}
+                          onClick={() => handleApprove(req.id)}
+                          style={{
+                            padding: '8px 16px',
+                            background: C.green700,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            opacity: processingId === req.id ? 0.6 : 1,
+                            transition: 'transform 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
                         >✓ Approve</button>
-                        <button style={{
-                          padding: '8px 16px',
-                          background: C.red700,
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          transition: 'transform 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                        onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                        <button
+                          disabled={processingId === req.id}
+                          onClick={() => handleReject(req.id)}
+                          style={{
+                            padding: '8px 16px',
+                            background: C.red700,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            opacity: processingId === req.id ? 0.6 : 1,
+                            transition: 'transform 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
                         >✗ Reject</button>
                       </div>
                     </td>

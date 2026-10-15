@@ -9,6 +9,12 @@ from extensions import db
 
 leaves_bp = Blueprint('leaves', __name__)
 
+
+def parse_bool(value):
+    if isinstance(value, str):
+        return value.strip().lower() in ('true', '1', 'yes', 'on')
+    return bool(value)
+
 # @route   POST /api/leaves
 # @desc    Create a new leave request
 # @access  Private
@@ -62,6 +68,19 @@ def create_leave():
                 'message': 'End date must be after or equal to start date'
             }), 400
         
+        is_half_day = parse_bool(data.get('halfDay'))
+        if is_half_day:
+            end_date = start_date
+            number_of_days = 0.5
+        else:
+            try:
+                number_of_days = float(data['numberOfDays'])
+            except (TypeError, ValueError):
+                return jsonify({
+                    'success': False,
+                    'message': 'numberOfDays must be a number'
+                }), 400
+        
         attachment_url = None
         if file and file.filename:
             file_data = file.read()
@@ -84,7 +103,8 @@ def create_leave():
             leave_type=data['leaveType'],
             start_date=start_date,
             end_date=end_date,
-            number_of_days=int(float(data['numberOfDays'])),
+            number_of_days=number_of_days,
+            is_half_day=is_half_day,
             reason=data['reason'].strip(),
             attachment=attachment_url
         )
@@ -263,11 +283,16 @@ def update_leave(leave_id):
                         'message': 'End date must be after or equal to start date'
                     }), 400
                 
-                leave.start_date = start_date
-                leave.end_date = end_date
+                if 'halfDay' in data:
+                    leave.is_half_day = parse_bool(data['halfDay'])
                 
-                if 'numberOfDays' in data:
-                    leave.number_of_days = data['numberOfDays']
+                leave.start_date = start_date
+                leave.end_date = start_date if leave.is_half_day else end_date
+                
+                if leave.is_half_day:
+                    leave.number_of_days = 0.5
+                elif 'numberOfDays' in data:
+                    leave.number_of_days = float(data['numberOfDays'])
             except ValueError:
                 return jsonify({
                     'success': False,
