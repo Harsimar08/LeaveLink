@@ -1,10 +1,10 @@
-import os
-from flask import Blueprint, request, jsonify, current_app, url_for
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from models.leave import Leave
 from models.user import User
+from models.stored_file import StoredFile
 from extensions import db
 
 leaves_bp = Blueprint('leaves', __name__)
@@ -63,11 +63,18 @@ def create_leave():
             }), 400
         
         attachment_url = None
-        if file:
-            filename = secure_filename(file.filename)
-            save_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-            file.save(save_path)
-            attachment_url = url_for('uploaded_file', filename=filename, _external=True)
+        if file and file.filename:
+            file_data = file.read()
+            stored = StoredFile(
+                category='attachment',
+                filename=secure_filename(file.filename)[-150:] or 'attachment',
+                content_type=file.mimetype or 'application/octet-stream',
+                size=len(file_data),
+                data=file_data,
+                uploaded_by=user_id
+            )
+            db.session.add(stored)
+            attachment_url = stored.url
         elif data.get('attachment'):
             attachment_url = data.get('attachment')
         
@@ -77,7 +84,7 @@ def create_leave():
             leave_type=data['leaveType'],
             start_date=start_date,
             end_date=end_date,
-            number_of_days=data['numberOfDays'],
+            number_of_days=int(float(data['numberOfDays'])),
             reason=data['reason'].strip(),
             attachment=attachment_url
         )

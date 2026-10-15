@@ -197,6 +197,12 @@ body {
     animation: fadeIn 0.25s ease-out;
 }
 
+@media (min-width: 981px) {
+    .sidebar-overlay {
+        display: none;
+    }
+}
+
 /* Left sidebar */
 .sidebar {
     position: fixed;

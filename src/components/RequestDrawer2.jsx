@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createLeaveRequest } from '../utils/api-auth'
 
 export default function RequestDrawer({ open, onClose }) {
   const [from, setFrom] = useState('')
@@ -22,15 +23,18 @@ export default function RequestDrawer({ open, onClose }) {
 
   if (!open) return null
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e && e.preventDefault && e.preventDefault()
-    // Simulate submission: persist small record in localStorage
     try {
-      const recent = JSON.parse(localStorage.getItem('leaveRequests') || '[]')
-      recent.unshift({ id: Date.now(), from, to, type, note, notify, status: 'Pending' })
-      localStorage.setItem('leaveRequests', JSON.stringify(recent))
+      await createLeaveRequest({
+        leaveType: type,
+        startDate: from,
+        endDate: to,
+        numberOfDays: Math.max(1, Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1),
+        reason: note || 'Leave request'
+      })
     } catch (err) {
-      // ignore
+      console.error('Leave request submission error:', err)
     }
     setShowModal(true)
     // optionally auto close drawer after a short delay

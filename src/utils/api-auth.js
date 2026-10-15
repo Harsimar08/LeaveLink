@@ -3,6 +3,29 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://l
 
 console.log('🔧 API URL:', API_URL) // Debug log to verify correct URL
 
+const TOKEN_KEY = 'token'
+export const AUTH_EXPIRED_EVENT = 'leavelink:auth-expired'
+
+// The session token lives in sessionStorage so every tab keeps its own login
+// (e.g. principal in one tab, faculty in another) and survives reloads.
+// localStorage only remembers the latest login to seed newly opened tabs.
+if (!sessionStorage.getItem(TOKEN_KEY) && localStorage.getItem(TOKEN_KEY)) {
+  sessionStorage.setItem(TOKEN_KEY, localStorage.getItem(TOKEN_KEY))
+}
+
+export const saveToken = (token) => {
+  sessionStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export const clearToken = () => {
+  const token = sessionStorage.getItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  if (localStorage.getItem(TOKEN_KEY) === token) {
+    localStorage.removeItem(TOKEN_KEY)
+  }
+}
+
 // Helper to parse JSON response safely
 const safeParseJson = async (response) => {
   const text = await response.text()
@@ -15,10 +38,20 @@ const safeParseJson = async (response) => {
 
   if (!response.ok) {
     const errorMsg = data.message || data.error || `Server error (${response.status}). Please try again.`
-    throw new Error(errorMsg)
+    const error = new Error(errorMsg)
+    error.status = response.status
+    error.authError = !!data.authError
+    throw error
   }
 
   return data
+}
+
+const isAuthFailure = (status) => status === 401 || status === 404 || status === 422
+
+const handleAuthFailure = () => {
+  clearToken()
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
 }
 
 // Authentication Service
@@ -81,49 +114,46 @@ export const registerUser = async (userData) => {
   }
 }
 
-// Get current user from API (always fetch from database, never localStorage)
+// Get current user from API (always fetch from database, never cached).
+// Returns null when the token is rejected; throws on network/server errors
+// so a temporary outage doesn't log the user out.
 export const fetchCurrentUser = async () => {
-  try {
-    const token = localStorage.getItem('token')
-    if (!token) return null
+  const token = getToken()
+  if (!token) return null
 
+  try {
     const response = await fetch(`${API_URL}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`
-      }
+      },
+      cache: 'no-store'
     })
 
     const data = await safeParseJson(response)
-
-    if (data.success) {
-      // Return user data from database
-      return data.user
-    } else {
-      // Token is invalid, clear storage
-      localStorage.removeItem('token')
+    return data.success ? data.user : null
+  } catch (error) {
+    if (isAuthFailure(error.status)) {
+      clearToken()
       return null
     }
-  } catch (error) {
     console.error('Fetch user error:', error)
-    localStorage.removeItem('token')
-    return null
+    throw error
   }
 }
 
 // Logout
 export const logout = () => {
-  localStorage.removeItem('token')
+  clearToken()
 }
 
 // Check if authenticated
 export const isAuthenticated = () => {
-  const token = localStorage.getItem('token')
-  return !!token
+  return !!getToken()
 }
 
 // Get auth token
 export const getToken = () => {
-  return localStorage.getItem('token')
+  return sessionStorage.getItem(TOKEN_KEY)
 }
 
 // API request helper with auth
@@ -140,6 +170,7 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 
   const config = {
+    cache: 'no-store',
     ...options,
     headers
   }
@@ -158,6 +189,9 @@ export const apiRequest = async (endpoint, options = {}) => {
     
     return data
   } catch (error) {
+    if (token && error.authError) {
+      handleAuthFailure()
+    }
     console.error('API request error:', error)
     throw error
   }

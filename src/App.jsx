@@ -22,7 +22,7 @@ import PrincipalDashboard from './pages/PrincipalDashboard'
 export default function App() {
   const { isAuthenticated, loading, user } = useAuth()
   const [openDrawer, setOpenDrawer] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 980)
 
   // Show loading spinner while checking authentication
   if (loading) {

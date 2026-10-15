@@ -1,8 +1,21 @@
 """
 JWT Helper Functions
-Centralized functions to extract user information from JWT tokens
+Centralized functions to create tokens and extract user information from them
 """
-from flask_jwt_extended import get_jwt_identity, get_jwt
+from flask_jwt_extended import create_access_token, get_jwt_identity, get_jwt
+
+
+def create_user_token(user):
+    """Create an access token bound to this exact user (id + email + role).
+
+    The email/role claims are re-checked against the database on every request,
+    so a token can never resolve to a different account that happens to share
+    the same numeric id.
+    """
+    return create_access_token(
+        identity=str(user.id),
+        additional_claims={'role': user.role, 'email': user.email}
+    )
 
 def get_current_user_id():
     """Get the current user's ID from JWT token"""

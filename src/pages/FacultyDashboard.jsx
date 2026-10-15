@@ -26,16 +26,6 @@ export default function Dashboard(){
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [searchText, setSearchText] = useState('')
   const [selectedTeacher, setSelectedTeacher] = useState(null)
-  
-  // Clean up old localStorage keys on mount
-  useEffect(() => {
-    if (localStorage.getItem('currentUser')) {
-      localStorage.removeItem('currentUser')
-    }
-    if (localStorage.getItem('profileUser')) {
-      localStorage.removeItem('profileUser')
-    }
-  }, [])
 
   const [leaveHistory] = useState([
     {

@@ -302,13 +302,10 @@ export default function Dashboard(){
   ])
 
   React.useEffect(() => {
-    try {
-      const img = localStorage.getItem('profileImage')
-      if (img) setProfileImage(img)
-    } catch (err) {
-      // ignore
+    if (user?.profileImage) {
+      setProfileImage(user.profileImage)
     }
-  }, [])
+  }, [user])
 
   // filteredLeaves is derived from leaveHistory + filters
   const [filteredLeaves, setFilteredLeaves] = useState(leaveHistory)

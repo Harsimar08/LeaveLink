@@ -5,6 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    open: true
+    open: true,
+    // Uploaded files are linked as relative /api/files/... URLs
+    proxy: {
+      '/api': 'http://localhost:5000'
+    }
   }
 })

@@ -49,6 +49,11 @@ Click **"Deploy"**. Vercel will:
 ---
 
 ## 🔍 Database Recommendations for Vercel
-Since Vercel serverless functions are stateless:
-- Use a cloud-hosted MySQL/MariaDB database (e.g. **PlanetScale**, **Aiven**, **Railway**, **AWS RDS**) or PostgreSQL (e.g. **Supabase**, **Neon**).
-- Set the connection string in the `DATABASE_URL` environment variable on Vercel.
+Since Vercel serverless functions are stateless, a cloud database is **required** for logins and leaves to be shared between devices:
+- Easiest: Vercel Dashboard → your project → **Storage** → **Create Database** → **Neon (Postgres)** → connect it to the project. This injects `DATABASE_URL` automatically.
+- Any cloud MySQL (e.g. **Aiven**, **Railway**, **AWS RDS**) or PostgreSQL (e.g. **Supabase**, **Neon**) also works. The backend reads `DATABASE_URL`, then `POSTGRES_URL`, then `MYSQL_URL`. Neon/Supabase URLs with `?sslmode=require` can be pasted as-is.
+- Redeploy after adding the variable, then open `/api/health`: it must report `"sharedDatabase": true`.
+
+Without a cloud database every serverless instance uses its own temporary SQLite file. `/api/health` then reports `"status": "degraded"`, accounts disappear on cold starts, and users are asked to log in again whenever their request reaches a different instance.
+
+Uploaded holiday PDFs and leave attachments are stored in the database (max 4 MB per file), so they are visible from every device.

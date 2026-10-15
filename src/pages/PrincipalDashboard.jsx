@@ -77,16 +77,6 @@ export default function PrincipalDashboard(){
 
   const monthLabel = today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const formatCalendarDate = (date) => date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
-  
-  // Clean up old localStorage keys on mount
-  React.useEffect(() => {
-    if (localStorage.getItem('currentUser')) {
-      localStorage.removeItem('currentUser')
-    }
-    if (localStorage.getItem('profileUser')) {
-      localStorage.removeItem('profileUser')
-    }
-  }, [])
 
   React.useEffect(() => {
     if (!isAuthenticated || user?.role !== 'principal') {

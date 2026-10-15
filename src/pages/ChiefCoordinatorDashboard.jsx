@@ -14,16 +14,6 @@ export default function ChiefCoordinatorDashboard(){
     pendingApprovals: 12,
     onLeaveToday: 8
   })
-  
-  // Clean up old localStorage keys on mount
-  React.useEffect(() => {
-    if (localStorage.getItem('currentUser')) {
-      localStorage.removeItem('currentUser')
-    }
-    if (localStorage.getItem('profileUser')) {
-      localStorage.removeItem('profileUser')
-    }
-  }, [])
 
   React.useEffect(() => {
     if (!isAuthenticated || user?.role !== 'chief_coordinator') {

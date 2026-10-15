@@ -2,11 +2,11 @@
 OAuth routes for Google and GitHub authentication
 """
 from flask import Blueprint, request, jsonify, redirect, url_for, session
-from flask_jwt_extended import create_access_token
 from authlib.integrations.flask_client import OAuth
 from urllib.parse import quote
 from models.user import User
 from extensions import db
+from utils.jwt_helpers import create_user_token
 import os
 import secrets
 from sqlalchemy.exc import IntegrityError
@@ -133,10 +133,7 @@ def google_callback():
             print(f'[OAUTH] Google signup successful for new user: {email}')
         
         # Generate JWT token
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={'role': user.role}
-        )
+        access_token = create_user_token(user)
         
         # Get frontend URL from session
         frontend_url = session.get('frontend_url', 'http://localhost:5173')
@@ -215,10 +212,7 @@ def google_signup_complete():
             }), 400
         
         # Generate new JWT token with updated role
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={'role': user.role}
-        )
+        access_token = create_user_token(user)
         
         return jsonify({
             'success': True,

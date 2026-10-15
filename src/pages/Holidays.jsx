@@ -153,7 +153,7 @@ export default function Holidays() {
   const handleDelete = async (filename) => {
     if (!confirm('Delete this PDF?')) return
     try {
-      await apiRequest(`/holidays/pdfs/${filename}`, { method: 'DELETE' })
+      await apiRequest(`/holidays/pdfs/${encodeURIComponent(filename)}`, { method: 'DELETE' })
       loadPdfs()
     } catch (e) {
       console.error(e)

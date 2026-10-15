@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react'
-import { fetchCurrentUser } from '../utils/api-auth'
+import { fetchCurrentUser, getToken, saveToken, clearToken, AUTH_EXPIRED_EVENT } from '../utils/api-auth'
 
 const AuthContext = createContext(null)
 
@@ -14,7 +14,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [token, setToken] = useState(localStorage.getItem('token'))
+  const [token, setToken] = useState(getToken())
   
   // Aggressive cleanup function
   const cleanupOldLocalStorage = () => {
@@ -46,41 +46,55 @@ export const AuthProvider = ({ children }) => {
     return () => clearInterval(intervalId)
   }, [])
 
+  // The server rejected this tab's token (expired, or no longer matches its user)
+  useEffect(() => {
+    const handleExpired = () => {
+      setToken(null)
+      setUser(null)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+  }, [])
+
   // Load user from API when token exists
   useEffect(() => {
+    let cancelled = false
+
     const loadUser = async () => {
-      if (token) {
-        try {
-          const userData = await fetchCurrentUser()
-          if (userData) {
-            setUser(userData)
-            console.log('✅ User loaded  :', userData.name || userData.fullName)
-          } else {
-            // Token is invalid, clear it
-            setToken(null)
-            localStorage.removeItem('token')
-          }
-        } catch (error) {
-          console.error('Failed to load user:', error)
-          setToken(null)
-          localStorage.removeItem('token')
-        }
+      if (!token) {
+        setUser(null)
+        setLoading(false)
+        return
       }
-      setLoading(false)
+      try {
+        const userData = await fetchCurrentUser()
+        if (cancelled) return
+        if (userData) {
+          setUser(userData)
+          console.log('✅ User loaded  :', userData.name || userData.fullName)
+        } else {
+          // Token was rejected by the server
+          setToken(null)
+          setUser(null)
+        }
+      } catch (error) {
+        console.error('Failed to load user:', error)
+      }
+      if (!cancelled) setLoading(false)
     }
 
     loadUser()
+    return () => { cancelled = true }
   }, [token])
 
   const login = async (userData, authToken) => {
-    // Save token to localStorage and state
-    localStorage.setItem('token', authToken)
-    setToken(authToken)
+    saveToken(authToken)
     setUser(userData)
+    setToken(authToken)
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
+    clearToken()
     setToken(null)
     setUser(null)
   }

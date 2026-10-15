@@ -25,8 +25,7 @@ export default function AuthCallback() {
       }
 
       try {
-        // Store token
-        localStorage.setItem('token', token)
+        // Token will be stored by AuthContext login()
 
         // Fetch user data - Use environment variable
         const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api')

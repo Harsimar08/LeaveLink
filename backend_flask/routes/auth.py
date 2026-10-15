@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.user import User
 from extensions import db
+from utils.jwt_helpers import create_user_token
 from sqlalchemy.exc import IntegrityError
 import re
 
@@ -114,11 +115,7 @@ def register():
                 'error': msg
             }), 400
         
-        # Generate JWT token with user ID as string (Flask-JWT-Extended requirement)
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={'role': user.role}
-        )
+        access_token = create_user_token(user)
         
         print(f'[AUTH] User registered: {user.email} (ID: {user.id}, Role: {user.role})')
         
@@ -208,12 +205,7 @@ def login():
                 'message': 'Account is deactivated'
             }), 401
         
-        # Generate JWT token with user ID as string (Flask-JWT-Extended requirement)
-        # We'll include additional data in the token claims
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={'role': user.role}
-        )
+        access_token = create_user_token(user)
         
         print(f'[AUTH] Login successful: {user.email}')
         print(f'Generated token for user ID: {user.id}, role: {user.role}')
@@ -244,7 +236,7 @@ def get_current_user():
         user_id = int(get_jwt_identity())
         print(f'Fetching user with ID: {user_id}')  # Debug log
         
-        user = User.query.get(user_id)
+        user = safe_db_exec(lambda: User.query.get(user_id))
         if not user:
             return jsonify({
                 'success': False,
