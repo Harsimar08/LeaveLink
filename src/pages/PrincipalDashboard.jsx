@@ -91,6 +91,41 @@ export default function PrincipalDashboard(){
     rejectedThisMonth: leaves.filter((l) => l.status === 'Rejected' && isThisMonth(l.actionDate)).length
   }
 
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  const absentToday = absentIdsOn(today)
+  const departmentStats = Object.entries(
+    facultyUsers.reduce((groups, u) => {
+      const dept = u.department || 'Unassigned'
+      ;(groups[dept] = groups[dept] || []).push(u)
+      return groups
+    }, {})
+  )
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dept, members]) => {
+      const ids = new Set(members.map((m) => m.id))
+      const deptLeaves = approvedLeaves.filter((l) => ids.has(l.user?.id || l.userId))
+      const daysThisYear = deptLeaves
+        .filter((l) => parseDate(l.startDate)?.getFullYear() === today.getFullYear())
+        .reduce((sum, l) => sum + (Number(l.numberOfDays) || 0), 0)
+      const onLeaveThisMonth = new Set(deptLeaves
+        .filter((l) => {
+          const start = parseDate(l.startDate)
+          const end = parseDate(l.endDate) || start
+          return start && start <= monthEnd && end >= monthStart
+        })
+        .map((l) => l.user?.id || l.userId))
+      const coordinator = members.find((m) => m.role === 'coordinator') || members.find((m) => m.role === 'chief_coordinator')
+      return {
+        dept,
+        coord: coordinator?.name || '-',
+        count: members.length,
+        onLeave: members.filter((m) => absentToday.has(m.id)).length,
+        avg: (daysThisYear / members.length).toFixed(1),
+        util: Math.round((onLeaveThisMonth.size / members.length) * 100)
+      }
+    })
+
   const [hoveredDate, setHoveredDate] = useState(null)
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getDay()
@@ -350,12 +385,12 @@ export default function PrincipalDashboard(){
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { dept: 'Computer Applications', coord: 'Amit Bora', count: 12, onLeave: 2, avg: 11.5, util: 76 },
-                  { dept: 'Computer Science', coord: 'Priya Sharma', count: 15, onLeave: 3, avg: 13.2, util: 88 },
-                  { dept: 'Information Technology', coord: 'Rahul Kumar', count: 10, onLeave: 1, avg: 10.8, util: 72 },
-                  { dept: 'Electronics', coord: 'Sneha Patel', count: 8, onLeave: 2, avg: 14.5, util: 97 }
-                ].map((dept, idx) => (
+                {departmentStats.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '24px 14px', textAlign: 'center', color: C.ink400, fontSize: '14px' }}>No department data yet</td>
+                  </tr>
+                )}
+                {departmentStats.map((dept, idx) => (
                   <tr key={idx} style={{ borderBottom: `1px solid ${C.line}`, transition: 'background 0.2s' }}
                     onMouseEnter={(e) => e.currentTarget.style.background = C.paper}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}

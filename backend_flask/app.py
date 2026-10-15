@@ -326,7 +326,7 @@ def health():
         }), 500
 
 def migrate_leave_half_day_columns():
-    """create_all() never alters existing tables, so older databases need these columns upgraded."""
+    """create_all() never alters existing tables, so older databases need these columns upgraded and old half-day rows repaired."""
     columns = {col['name']: col for col in inspect(db.engine).get_columns('leaves')}
     dialect = db.engine.dialect.name
     statements = []
@@ -346,6 +346,16 @@ def migrate_leave_half_day_columns():
             for statement in statements:
                 conn.execute(text(statement))
         print(f'[DB] Migrated leaves table: {len(statements)} change(s)')
+
+    # The old code stored half-day requests as int(0.5) == 0, so a 0-day leave is always a half-day
+    from models.leave import Leave
+    fixed = Leave.query.filter(Leave.number_of_days == 0).update(
+        {Leave.number_of_days: 0.5, Leave.is_half_day: True, Leave.end_date: Leave.start_date},
+        synchronize_session=False
+    )
+    db.session.commit()
+    if fixed:
+        print(f'[DB] Restored {fixed} half-day leave(s) saved as 0 days')
 
 # Before request hook to guarantee tables exist on serverless cold start
 @app.before_request

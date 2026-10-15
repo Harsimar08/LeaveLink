@@ -133,15 +133,30 @@ export default function Dashboard(){
     return days
   }
 
+  // Managers see aggregated absent counts; teachers see their own leave occurrences
+  const countAbsentOn = (date) => {
+    const normalizedDate = normalizeDate(date)
+    const dailyAbsentLeaves = (isTeacherView ? visibleLeaves : approvedLeaves).filter((leave) => isDateInRange(normalizedDate, parseDate(leave.startDate), parseDate(leave.endDate)))
+    return new Set(dailyAbsentLeaves.map((leave) => leave.user?.id || leave.userId).filter(Boolean)).size
+  }
+
   const graphDates = getRecentWorkdays(todayNormalized, 5)
   const graphLabels = graphDates.map((date) => dayNames[date.getDay()])
-  const graphData = graphDates.map((date) => {
-    const normalizedDate = normalizeDate(date)
-    // Managers see aggregated absent counts; teachers see their own leave occurrences
-    const dailyAbsentLeaves = (isTeacherView ? visibleLeaves : approvedLeaves).filter((leave) => isDateInRange(normalizedDate, parseDate(leave.startDate), parseDate(leave.endDate)))
-    const dailyAbsentIds = new Set(dailyAbsentLeaves.map((leave) => leave.user?.id || leave.userId).filter(Boolean))
-    return dailyAbsentIds.size
-  })
+  const graphData = graphDates.map(countAbsentOn)
+
+  const monthWorkdays = Array.from({ length: todayNormalized.getDate() }, (_, i) => new Date(today.getFullYear(), today.getMonth(), i + 1))
+    .filter((date) => date.getDay() !== 0 && date.getDay() !== 6)
+  const monthlyAverage = monthWorkdays.length
+    ? (monthWorkdays.reduce((sum, date) => sum + countAbsentOn(date), 0) / monthWorkdays.length).toFixed(1)
+    : '0.0'
+
+  const lastTenWorkdays = getRecentWorkdays(todayNormalized, 10)
+  const previousWeekAbsences = lastTenWorkdays.slice(0, 5).reduce((sum, date) => sum + countAbsentOn(date), 0)
+  const currentWeekAbsences = lastTenWorkdays.slice(5).reduce((sum, date) => sum + countAbsentOn(date), 0)
+  const trendPercent = previousWeekAbsences
+    ? Math.round(((currentWeekAbsences - previousWeekAbsences) / previousWeekAbsences) * 100)
+    : (currentWeekAbsences ? 100 : 0)
+  const trendLabel = `${trendPercent > 0 ? '+' : ''}${trendPercent}%`
 
   const getCalendarDayInfo = (day) => {
     if (!day) return null
@@ -711,12 +726,12 @@ export default function Dashboard(){
               </div>
               <div style={{ background: C.paper, borderRadius: '11px', padding: '20px', border: `1px solid ${C.line}` }}>
                 <div style={{ color: C.ink400, fontSize: 13, marginBottom: 8 }}>Average</div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: C.green700 }}>3.2</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: C.green700 }}>{monthlyAverage}</div>
                 <div style={{ marginTop: 8, color: C.ink600, fontSize: 13.5 }}>Monthly daily average</div>
               </div>
               <div style={{ background: C.paper, borderRadius: '11px', padding: '20px', border: `1px solid ${C.line}` }}>
                 <div style={{ color: C.ink400, fontSize: 13, marginBottom: 8 }}>Trend</div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: C.gold600 }}>+12%</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: C.gold600 }}>{trendLabel}</div>
                 <div style={{ marginTop: 8, color: C.ink600, fontSize: 13.5 }}>Compared to last week</div>
               </div>
             </div>
