@@ -84,7 +84,7 @@ export default function Dashboard(){
   const teacherRoles = ['faculty', 'coordinator', 'chief_coordinator']
   const managerRoles = ['principal', 'management']
   const canListUsers = ['coordinator', 'chief_coordinator', 'principal'].includes(user?.role)
-  const allTeachers = teacherUsers.filter((u) => ['faculty', 'coordinator', 'chief_coordinator', 'principal'].includes(u.role))
+  const allTeachers = teacherUsers.filter((u) => u.isActive !== false && ['faculty', 'coordinator', 'chief_coordinator', 'principal'].includes(u.role))
   const totalTeachers = allTeachers.length
   // For management/principal we show aggregated approved leaves
   const approvedLeaves = leaveRecords.filter((leave) => leave.status === 'Approved')

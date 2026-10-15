@@ -75,7 +75,7 @@ export default function PrincipalDashboard(){
     return !!date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth()
   }
 
-  const facultyUsers = users.filter((u) => APPROVAL_ROLES.includes(u.role))
+  const facultyUsers = users.filter((u) => u.isActive !== false && APPROVAL_ROLES.includes(u.role))
   const approvedLeaves = leaves.filter((l) => l.status === 'Approved' && APPROVAL_ROLES.includes(l.user?.role))
   const absentIdsOn = (date) => new Set(approvedLeaves.filter((l) => coversDate(l, date)).map((l) => l.user?.id || l.userId))
   const pendingApprovals = leaves
