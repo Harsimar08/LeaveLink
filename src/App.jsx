@@ -1,5 +1,5 @@
 import React, {useState} from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
@@ -18,6 +18,19 @@ import Approvals from './pages/Approvals'
 import LeaveRequestDetails from './pages/LeaveRequestDetails'
 import ManagementDashboard from './pages/ManagementDashboard'
 import PrincipalDashboard from './pages/PrincipalDashboard'
+import LeaveReview from './pages/LeaveReview'
+import { safeRedirectPath } from './utils/redirect'
+
+function RedirectToLogin() {
+  const location = useLocation()
+  const target = safeRedirectPath(location.pathname + location.search)
+  return <Navigate to={target && target !== '/' ? `/login?redirect=${encodeURIComponent(target)}` : '/login'} replace />
+}
+
+function LoggedInRedirect() {
+  const [searchParams] = useSearchParams()
+  return <Navigate to={safeRedirectPath(searchParams.get('redirect')) || '/dashboard'} replace />
+}
 
 export default function App() {
   const { isAuthenticated, loading, user } = useAuth()
@@ -60,7 +73,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<RedirectToLogin />} />
       </Routes>
     )
   }
@@ -94,9 +107,10 @@ export default function App() {
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/leave-request-details" element={<LeaveRequestDetails />} />
+            <Route path="/leave-requests/:leaveId" element={<LeaveReview />} />
             <Route path="/management-dashboard" element={<ManagementDashboard />} />
             <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
-            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<LoggedInRedirect />} />
           </Routes>
         </main>
       </div>

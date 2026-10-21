@@ -28,6 +28,17 @@ In the Vercel Project Settings under **Environment Variables**, add the followin
 - `GOOGLE_CLIENT_ID`: Your Google OAuth Client ID.
 - `GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret.
 
+#### Email Notification Variables (leave request emails):
+- `SMTP_HOST`: Mail server, e.g. `smtp.gmail.com`.
+- `SMTP_PORT`: `587` (STARTTLS) or `465` (SSL). Defaults to `587`.
+- `SMTP_USER`: The sending mailbox, e.g. `leavelink.jims@gmail.com`.
+- `SMTP_PASSWORD`: Its password. For Gmail this must be an **App Password** (Google Account → Security → 2-Step Verification → App passwords), not the normal password.
+- `MAIL_FROM` (optional): Sender address if different from `SMTP_USER`.
+- `MAIL_FROM_NAME` (optional): Sender name. Defaults to `LeaveLink`.
+- `APP_URL` (optional): Site address used in the "Action Required – Review Leave Request" link. On Vercel it defaults to the address the request came from.
+
+If the SMTP variables are missing, leaves still work and the server log shows `[MAIL] SMTP is not configured`.
+
 ---
 
 ### 3. Deploy!

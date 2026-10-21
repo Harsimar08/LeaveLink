@@ -6,6 +6,7 @@ from models.leave import Leave
 from models.user import User
 from models.stored_file import StoredFile
 from extensions import db
+from utils.notifications import notify_leave_submitted, notify_leave_decision
 
 leaves_bp = Blueprint('leaves', __name__)
 
@@ -111,6 +112,8 @@ def create_leave():
         
         db.session.add(leave)
         db.session.commit()
+        
+        notify_leave_submitted(leave)
         
         return jsonify({
             'success': True,
@@ -422,6 +425,8 @@ def approve_leave(leave_id):
         
         db.session.commit()
         
+        notify_leave_decision(leave)
+        
         return jsonify({
             'success': True,
             'message': 'Leave request approved successfully',
@@ -493,6 +498,8 @@ def reject_leave(leave_id):
         leave.rejection_reason = rejection_reason
         
         db.session.commit()
+        
+        notify_leave_decision(leave)
         
         return jsonify({
             'success': True,
