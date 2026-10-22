@@ -127,6 +127,8 @@ export default function PrincipalDashboard(){
     })
 
   const [hoveredDate, setHoveredDate] = useState(null)
+  const TOOLTIP_WIDTH = 200
+  const TOOLTIP_HEIGHT = 110
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getDay()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
@@ -239,7 +241,14 @@ export default function PrincipalDashboard(){
       </div>
 
       {/* Key Metrics Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: 32 }}>
+      <style>{`
+        .principal-kpi-grid > div { min-width: 0; padding: 22px 20px !important; }
+        @media (max-width: 640px) {
+          .principal-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+          .principal-kpi-grid > div { padding: 16px 14px !important; }
+        }
+      `}</style>
+      <div className="principal-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '20px', marginBottom: 32 }}>
         <div style={{
           background: C.card,
           padding: '26px',
@@ -314,11 +323,27 @@ export default function PrincipalDashboard(){
             {calendarDays.map((day, index) => {
               const dayInfo = day ? attendanceData[day - 1] : null
               const isToday = day === today.getDate()
+              const showTooltip = (cell) => {
+                const containerWidth = cell.offsetParent ? cell.offsetParent.clientWidth : 0
+                const centerX = cell.offsetLeft + cell.offsetWidth / 2
+                const below = cell.offsetTop < TOOLTIP_HEIGHT
+                setHoveredDate({
+                  ...dayInfo,
+                  left: Math.max(0, Math.min(centerX - TOOLTIP_WIDTH / 2, containerWidth - TOOLTIP_WIDTH)),
+                  top: below ? cell.offsetTop + cell.offsetHeight + 8 : cell.offsetTop - 8,
+                  below
+                })
+              }
               return (
                 <div
                   key={index}
-                  onMouseEnter={(e) => dayInfo && setHoveredDate({ ...dayInfo, x: e.currentTarget.offsetLeft, y: e.currentTarget.offsetTop })}
+                  onMouseEnter={(e) => dayInfo && showTooltip(e.currentTarget)}
                   onMouseLeave={() => setHoveredDate(null)}
+                  onClick={(e) => {
+                    if (!dayInfo) return
+                    if (hoveredDate?.day === day) setHoveredDate(null)
+                    else showTooltip(e.currentTarget)
+                  }}
                   style={{
                     minHeight: 40,
                     borderRadius: 9,
@@ -342,13 +367,14 @@ export default function PrincipalDashboard(){
           </div>
 
           {hoveredDate && (
-            <div style={{
+            <div role="tooltip" style={{
               position: 'absolute',
-              left: hoveredDate.x + 20,
-              top: hoveredDate.y - 4,
-              transform: 'translateX(-50%)',
-              minWidth: 180,
-              maxWidth: 240,
+              left: hoveredDate.left,
+              top: hoveredDate.top,
+              transform: hoveredDate.below ? 'none' : 'translateY(-100%)',
+              width: TOOLTIP_WIDTH,
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
               background: C.navy950,
               borderRadius: 12,
               padding: '12px 14px',

@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { createLeaveRequest, getLeaveRequests } from '../utils/api-auth';
+import { createLeaveRequest, getLeaveRequests, updateLeaveRequest, cancelLeave } from '../utils/api-auth';
 
 const leaveTypeLabels = {
   CL: 'Casual Leave',
   EL: 'Earned Leave',
   OD: 'On Duty Leave',
   AL: 'Academic Leave'
+};
+
+const leaveTypeIdFor = (name) =>
+  Object.keys(leaveTypeLabels).find((id) => id === name || leaveTypeLabels[id] === name) || '';
+
+const SUBMIT_SUCCESS_MESSAGE = 'Your leave request has been submitted successfully.';
+const UPDATE_SUCCESS_MESSAGE = 'Your leave request has been updated successfully.';
+
+const emptyForm = {
+  leaveType: '',
+  reason: '',
+  startDate: '',
+  endDate: '',
+  halfDay: false,
+  emergencyContact: '',
+  attachments: null
 };
 
 const COLORS = {
@@ -73,24 +89,33 @@ const leaveTypeOptions = [
 export default function LeaveRequest() {
   const { user } = useAuth();
 
-  const [formData, setFormData] = useState({
-    leaveType: '',
-    reason: '',
-    startDate: '',
-    endDate: '',
-    halfDay: false,
-    emergencyContact: '',
-    attachments: null
-  });
+  const [formData, setFormData] = useState(emptyForm);
 
   const [calculatedDays, setCalculatedDays] = useState(0);
   const [errors, setErrors] = useState({});
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [recentRequests, setRecentRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [dropHover, setDropHover] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(null);
+  // null | 'confirm' | 'success'
+  const [dialog, setDialog] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  useEffect(() => {
+    if (!successMessage || dialog === 'success') return;
+    const timer = setTimeout(() => setSuccessMessage(''), 6000);
+    return () => clearTimeout(timer);
+  }, [successMessage, dialog]);
+
+  useEffect(() => {
+    if (!dialog) return;
+    const onKey = (e) => { if (e.key === 'Escape' && !submitting) setDialog(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dialog, submitting]);
 
   // Load recent leave requests from database
   useEffect(() => {
@@ -102,7 +127,9 @@ export default function LeaveRequest() {
     try {
       setLoadingRequests(true);
       const leaves = await getLeaveRequests();
-      const filtered = leaves.filter((leave) => leave.user?.id === user?.id || leave.userId === user?.id)
+      const filtered = leaves.filter((leave) =>
+        (leave.user?.id === user?.id || leave.userId === user?.id) && leave.status !== 'Cancelled'
+      )
       const sorted = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       setLeaveRequests(sorted)
       setRecentRequests(sorted.slice(0, 5))
@@ -156,8 +183,51 @@ export default function LeaveRequest() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const resetForm = () => {
+    setFormData(emptyForm);
+    setEditingRequest(null);
+    setErrors({});
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) fileInput.value = '';
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
+    if (validateForm()) setDialog('confirm');
+  };
+
+  const startEditing = (request) => {
+    setEditingRequest(request);
+    setSuccessMessage('');
+    setErrors({});
+    setFormData({
+      leaveType: leaveTypeIdFor(request.leaveType),
+      reason: request.reason || '',
+      startDate: (request.startDate || '').slice(0, 10),
+      endDate: (request.endDate || request.startDate || '').slice(0, 10),
+      halfDay: !!request.isHalfDay,
+      emergencyContact: '',
+      attachments: null
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (request) => {
+    const id = request._id || request.id;
+    if (!window.confirm('Delete this leave request? This cannot be undone.')) return;
+    try {
+      setDeletingId(id);
+      await cancelLeave(id);
+      if (editingRequest && (editingRequest._id || editingRequest.id) === id) resetForm();
+      await loadRecentRequests();
+    } catch (error) {
+      alert('Delete failed: ' + (error.message || 'Unknown error'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const confirmSubmit = async () => {
     if (validateForm()) {
       try {
         setSubmitting(true);
@@ -190,30 +260,25 @@ export default function LeaveRequest() {
           }
         }
 
-        // Submit to database
-        await createLeaveRequest(leaveRequestData);
+        if (editingRequest) {
+          if (!formData.attachments) delete leaveRequestData.attachment;
+          await updateLeaveRequest(editingRequest._id || editingRequest.id, leaveRequestData);
+        } else {
+          await createLeaveRequest(leaveRequestData);
+        }
 
-        // Show success message
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 4000);
-
-        // Reset form
-        setFormData({
-          leaveType: '',
-          reason: '',
-          startDate: '',
-          endDate: '',
-          halfDay: false,
-          emergencyContact: '',
-          attachments: null
-        });
+        setSuccessMessage(editingRequest ? UPDATE_SUCCESS_MESSAGE : SUBMIT_SUCCESS_MESSAGE);
+        setDialog('success');
+        resetForm();
 
         // Reload recent requests
         await loadRecentRequests();
 
       } catch (error) {
         console.error('Error submitting leave request:', error);
+        setDialog(null);
         setErrors({ submit: error.message || 'Failed to submit leave request. Please try again.' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } finally {
         setSubmitting(false);
       }
@@ -253,6 +318,32 @@ export default function LeaveRequest() {
     textTransform: 'uppercase',
   };
 
+  const rowButtonStyle = (enabled, color) => ({
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: `1px solid ${enabled ? color : COLORS.line}`,
+    background: COLORS.white,
+    color: enabled ? color : COLORS.ink400,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+  });
+
+  const dialogButtonStyle = (primary) => ({
+    flex: 1,
+    padding: '12px 16px',
+    borderRadius: 10,
+    border: primary ? 'none' : `1px solid ${COLORS.line}`,
+    background: primary ? (submitting ? COLORS.ink400 : COLORS.navy900) : COLORS.white,
+    color: primary ? COLORS.white : COLORS.ink900,
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: submitting ? 'not-allowed' : 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  });
+
+  const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+
   const statusStyles = {
     approved: { color: COLORS.success, bg: COLORS.successTint },
     rejected: { color: COLORS.danger, bg: COLORS.dangerTint },
@@ -279,15 +370,17 @@ export default function LeaveRequest() {
             Leave Management
           </div>
           <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32, color: COLORS.ink900, margin: 0 }}>
-            New Leave Request
+            {editingRequest ? 'Edit Leave Request' : 'New Leave Request'}
           </h1>
           <p style={{ marginTop: 8, fontSize: 14.5, color: COLORS.ink600 }}>
-            Submit your leave application — your reporting authority will be notified for approval.
+            {editingRequest
+              ? 'Update your pending leave request below, then submit the changes.'
+              : 'Submit your leave application — your reporting authority will be notified for approval.'}
           </p>
         </div>
 
         {/* Success Message */}
-        {showSuccess && (
+        {successMessage && dialog !== 'success' && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12,
             background: COLORS.successTint,
@@ -299,7 +392,7 @@ export default function LeaveRequest() {
           }}>
             <IconCheck style={{ width: 22, height: 22, stroke: COLORS.success, fill: 'none', strokeWidth: 1.8, flexShrink: 0 }} />
             <strong style={{ color: COLORS.success, fontSize: 14, fontWeight: 600 }}>
-              Leave request submitted successfully. Your request is pending approval.
+              {successMessage}
             </strong>
           </div>
         )}
@@ -323,9 +416,20 @@ export default function LeaveRequest() {
         {/* Main Form */}
         <form onSubmit={handleSubmit}>
           <div style={cardStyle}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 24, color: COLORS.ink900, letterSpacing: '0.01em' }}>
-              Leave Details
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: COLORS.ink900, letterSpacing: '0.01em' }}>
+                {editingRequest ? 'Editing Leave Request' : 'Leave Details'}
+              </h3>
+              {editingRequest && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  style={{ background: 'none', border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: COLORS.ink600, cursor: 'pointer' }}
+                >
+                  Cancel editing
+                </button>
+              )}
+            </div>
 
             {/* Type of Leave - selectable cards */}
             <div style={{ marginBottom: 24 }}>
@@ -394,7 +498,7 @@ export default function LeaveRequest() {
                   value={formData.startDate}
                   onChange={handleChange}
                   style={inputStyle}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={editingRequest ? undefined : new Date().toISOString().split('T')[0]}
                 />
                 {errors.startDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.startDate}</div>}
               </div>
@@ -408,7 +512,7 @@ export default function LeaveRequest() {
                   onChange={handleChange}
                   disabled={formData.halfDay}
                   style={{ ...inputStyle, ...(formData.halfDay ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
-                  min={formData.startDate || new Date().toISOString().split('T')[0]}
+                  min={formData.startDate || (editingRequest ? undefined : new Date().toISOString().split('T')[0])}
                 />
                 {errors.endDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.endDate}</div>}
               </div>
@@ -488,6 +592,11 @@ export default function LeaveRequest() {
                 <div style={{ color: COLORS.ink400, fontSize: 13 }}>
                   PDF, DOC, JPG up to 10MB
                 </div>
+                {editingRequest?.attachment && !formData.attachments && (
+                  <div style={{ color: COLORS.ink600, fontSize: 13, marginTop: 6 }}>
+                    The current attachment is kept unless you upload a new file.
+                  </div>
+                )}
                 <input
                   id="fileInput"
                   type="file"
@@ -526,7 +635,7 @@ export default function LeaveRequest() {
                   Submitting...
                 </>
               ) : (
-                'Submit Leave Request'
+                editingRequest ? 'Update Leave Request' : 'Submit Leave Request'
               )}
             </button>
           </div>
@@ -553,18 +662,24 @@ export default function LeaveRequest() {
               {recentRequests.map((request) => {
                 const status = statusStyles[(request.status || '').toLowerCase()] || statusStyles.pending;
                 const days = request.numberOfDays ?? request.days ?? 0;
+                const requestId = request._id || request.id;
+                const isPending = request.status === 'Pending';
+                const isEditing = editingRequest && (editingRequest._id || editingRequest.id) === requestId;
+                const lockedTitle = isPending ? undefined : `${request.status} requests can no longer be changed`;
                 return (
                   <div
-                    key={request._id || request.id}
+                    key={requestId}
                     className="tto-row"
                     style={{
                       padding: 16,
                       borderRadius: 12,
                       background: COLORS.paper,
-                      border: `1px solid ${COLORS.line}`,
+                      border: `1px solid ${isEditing ? COLORS.gold500 : COLORS.line}`,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 12,
                       transition: 'transform 0.2s ease',
                     }}
                   >
@@ -576,16 +691,36 @@ export default function LeaveRequest() {
                         {new Date(request.startDate).toLocaleDateString()} to {new Date(request.endDate).toLocaleDateString()} ({request.isHalfDay ? '0.5 day, Half day' : `${days} ${days === 1 ? 'day' : 'days'}`})
                       </div>
                     </div>
-                    <div style={{
-                      padding: '5px 13px',
-                      borderRadius: 20,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      background: status.bg,
-                      color: status.color,
-                      textTransform: 'capitalize',
-                    }}>
-                      {request.status}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{
+                        padding: '5px 13px',
+                        borderRadius: 20,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        background: status.bg,
+                        color: status.color,
+                        textTransform: 'capitalize',
+                      }}>
+                        {request.status}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startEditing(request)}
+                        disabled={!isPending || deletingId === requestId}
+                        title={lockedTitle}
+                        style={rowButtonStyle(isPending, COLORS.navy800)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(request)}
+                        disabled={!isPending || deletingId === requestId}
+                        title={lockedTitle}
+                        style={rowButtonStyle(isPending, COLORS.danger)}
+                      >
+                        {deletingId === requestId ? 'Deleting...' : 'Delete'}
+                      </button>
                     </div>
                   </div>
                 );
@@ -594,6 +729,83 @@ export default function LeaveRequest() {
           )}
         </div>
       </div>
+
+      {dialog && (
+        <div
+          onClick={() => { if (!submitting) setDialog(null); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(10,18,32,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leave-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 440,
+              maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
+              background: COLORS.white, borderRadius: 16,
+              boxShadow: '0 24px 60px rgba(10,18,32,0.35)',
+              padding: 26, boxSizing: 'border-box',
+              animation: 'fadeIn 0.2s ease-out',
+            }}
+          >
+            {dialog === 'success' ? (
+              <div style={{ textAlign: 'center' }}>
+                <IconCheck style={{ width: 46, height: 46, stroke: COLORS.success, fill: 'none', strokeWidth: 1.6, marginBottom: 12 }} />
+                <h3 id="leave-dialog-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: COLORS.ink900, margin: '0 0 8px' }}>
+                  {successMessage === UPDATE_SUCCESS_MESSAGE ? 'Request Updated' : 'Request Submitted'}
+                </h3>
+                <p style={{ fontSize: 14.5, color: COLORS.ink600, margin: '0 0 22px' }}>{successMessage}</p>
+                <button type="button" autoFocus onClick={() => setDialog(null)} style={{ ...dialogButtonStyle(true), width: '100%' }}>
+                  OK
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 id="leave-dialog-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: COLORS.ink900, margin: '0 0 6px' }}>
+                  {editingRequest ? 'Submit changes to this leave request?' : 'Submit this leave request?'}
+                </h3>
+                <p style={{ fontSize: 13.5, color: COLORS.ink600, margin: '0 0 18px' }}>
+                  Please check the details before submitting.
+                </p>
+                <div style={{ display: 'grid', gap: 10, background: COLORS.paper, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: 16, marginBottom: 22, fontSize: 13.5 }}>
+                  {[
+                    ['Leave type', leaveTypeLabels[formData.leaveType] || formData.leaveType],
+                    ['From', formatDate(formData.startDate)],
+                    ['To', formatDate(formData.halfDay ? formData.startDate : formData.endDate)],
+                    ['Duration', formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`],
+                    ['Reason', formData.reason],
+                    ...(formData.attachments ? [['Attachment', formData.attachments.name]] : []),
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ display: 'flex', gap: 12 }}>
+                      <span style={{ width: 92, flexShrink: 0, color: COLORS.ink400, fontWeight: 600 }}>{label}</span>
+                      <span style={{ color: COLORS.ink900, fontWeight: 600, overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button" onClick={() => setDialog(null)} disabled={submitting} style={dialogButtonStyle(false)}>
+                    Cancel
+                  </button>
+                  <button type="button" autoFocus onClick={confirmSubmit} disabled={submitting} style={dialogButtonStyle(true)}>
+                    {submitting ? (
+                      <>
+                        <IconSpinner style={{ width: 16, height: 16, stroke: COLORS.gold300, fill: 'none', strokeWidth: 2 }} />
+                        Submitting...
+                      </>
+                    ) : 'Submit'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,14 +3,44 @@ from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from werkzeug.utils import secure_filename
 from models.stored_file import StoredFile
 from extensions import db
+from utils.holiday_parser import parse_holiday_pdf
 
 holidays_bp = Blueprint('holidays', __name__)
 
 ALLOWED_EXTENSIONS = {'pdf'}
 HOLIDAY_CATEGORY = 'holiday'
 
+# Parsed holiday lists keyed by the stored file's unique key (a re-upload gets a new key)
+_parsed_cache = {}
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def holidays_from(stored):
+    if stored.key not in _parsed_cache:
+        _parsed_cache[stored.key] = parse_holiday_pdf(stored.data)
+    return _parsed_cache[stored.key]
+
+
+# @route   GET /api/holidays
+# @desc    Holidays read from the most recently uploaded holiday PDF that contains a readable list
+# @access  Public
+@holidays_bp.route('', methods=['GET'])
+def list_holidays():
+    pdfs = StoredFile.query.filter_by(category=HOLIDAY_CATEGORY).order_by(StoredFile.created_at.desc()).all()
+    for pdf in pdfs:
+        holidays = holidays_from(pdf)
+        if holidays:
+            return jsonify({
+                'success': True,
+                'holidays': holidays,
+                'source': {'filename': pdf.filename, 'url': pdf.url,
+                           'uploadedAt': pdf.created_at.isoformat() if pdf.created_at else None},
+                'unreadable': []
+            }), 200
+    return jsonify({'success': True, 'holidays': [], 'source': None,
+                    'unreadable': [pdf.filename for pdf in pdfs]}), 200
 
 
 @holidays_bp.route('/pdfs', methods=['GET'])
@@ -57,7 +87,8 @@ def upload_pdf():
         print(f'Holiday PDF upload error: {e}')
         return jsonify({'success': False, 'message': 'Upload failed', 'error': str(e)}), 500
 
-    return jsonify({'success': True, 'filename': stored.filename, 'url': stored.url}), 201
+    return jsonify({'success': True, 'filename': stored.filename, 'url': stored.url,
+                    'holidaysFound': len(holidays_from(stored))}), 201
 
 
 @holidays_bp.route('/pdfs/<string:filename>', methods=['DELETE'])

@@ -1,7 +1,22 @@
 import React, { createContext, useState, useContext, useEffect } from 'react'
-import { fetchCurrentUser, getToken, saveToken, clearToken, AUTH_EXPIRED_EVENT } from '../utils/api-auth'
+import { fetchCurrentUser, getToken, saveToken, clearToken, refreshSessionToken, AUTH_EXPIRED_EVENT } from '../utils/api-auth'
 
 const AuthContext = createContext(null)
+
+export const IDLE_TIMEOUT_MS = 15 * 60 * 1000
+// Must stay well under the server's 15-minute token lifetime
+const TOKEN_REFRESH_MS = 5 * 60 * 1000
+export const IDLE_LOGOUT_FLAG = 'leavelink:idle-logout'
+const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'wheel']
+
+const tokenIssuedAt = (jwt) => {
+  try {
+    const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.iat ? payload.iat * 1000 : 0
+  } catch {
+    return 0
+  }
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
@@ -98,6 +113,49 @@ export const AuthProvider = ({ children }) => {
     setToken(null)
     setUser(null)
   }
+
+  // Sign out after 15 minutes without activity; renew the token while the user is active
+  const isSignedIn = !!user && !!token
+  useEffect(() => {
+    if (!isSignedIn) return
+    let lastActivity = Date.now()
+    let lastRefresh = tokenIssuedAt(getToken() || '')
+    let refreshing = false
+
+    const markActive = () => { lastActivity = Date.now() }
+    const check = async () => {
+      const now = Date.now()
+      if (now - lastActivity >= IDLE_TIMEOUT_MS) {
+        sessionStorage.setItem(IDLE_LOGOUT_FLAG, '1')
+        clearToken()
+        setToken(null)
+        setUser(null)
+        return
+      }
+      if (!refreshing && lastActivity > lastRefresh && now - lastRefresh >= TOKEN_REFRESH_MS) {
+        refreshing = true
+        try {
+          await refreshSessionToken()
+          lastRefresh = Date.now()
+        } catch (error) {
+          console.error('Session refresh failed:', error)
+        } finally {
+          refreshing = false
+        }
+      }
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+
+    ACTIVITY_EVENTS.forEach((name) => window.addEventListener(name, markActive, { passive: true }))
+    document.addEventListener('visibilitychange', onVisible)
+    const interval = setInterval(check, 20 * 1000)
+    check()
+    return () => {
+      ACTIVITY_EVENTS.forEach((name) => window.removeEventListener(name, markActive))
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(interval)
+    }
+  }, [isSignedIn])
 
   const updateUser = (updatedUserData) => {
     setUser(updatedUserData)

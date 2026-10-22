@@ -126,7 +126,8 @@ app.config['DATABASE_BACKEND'] = make_url(database_uri).get_backend_name()
 app.config['DATABASE_IS_SHARED'] = not (IS_VERCEL and app.config['DATABASE_BACKEND'] == 'sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET', 'jwt-secret-key-change-this')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+# Sessions end after 15 idle minutes; the frontend renews the token while the user is active
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
 
 if IS_VERCEL and not os.getenv('JWT_SECRET'):
     print('[AUTH] ⚠️  JWT_SECRET is not set on Vercel; tokens are signed with the public default key.')

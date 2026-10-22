@@ -1,8 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests, approveLeave, rejectLeave } from '../utils/api-auth'
 import { formatLeaveDays } from '../utils/leaveFormat'
+import LeaveFilters, { emptyLeaveFilters, filterLeaves } from '../components/LeaveFilters'
+
+const getApprovalRoles = (role) => {
+  switch (role) {
+    case 'management':
+      return ['principal']
+    case 'principal':
+      return ['chief_coordinator', 'coordinator', 'faculty']
+    default:
+      return []
+  }
+}
+
+const defaultFilters = { ...emptyLeaveFilters, status: 'Pending' }
 
 export default function Approvals(){
   const navigate = useNavigate()
@@ -10,6 +24,7 @@ export default function Approvals(){
   const [leaves, setLeaves] = useState([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState(null)
+  const [filters, setFilters] = useState(defaultFilters)
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -23,17 +38,6 @@ export default function Approvals(){
       return
     }
 
-    const getApprovalRoles = (role) => {
-      switch (role) {
-        case 'management':
-          return ['principal']
-        case 'principal':
-          return ['chief_coordinator', 'coordinator', 'faculty']
-        default:
-          return []
-      }
-    }
-
     let active = true
     const load = async (showLoading = true) => {
       if (showLoading) setLoading(true)
@@ -42,9 +46,9 @@ export default function Approvals(){
         if (!active) return
         const approvalRoles = getApprovalRoles(user.role)
         const filtered = all
-          .filter(l => l.status === 'Pending')
           .filter(l => l.user?.id !== user?.id)
           .filter(l => approvalRoles.includes(l.user?.role))
+          .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
 
         setLeaves(filtered)
       } catch (err) {
@@ -62,12 +66,22 @@ export default function Approvals(){
     }
   }, [navigate, isAuthenticated, user])
 
+  const markDecided = (id, status, rejectionReason) => {
+    setLeaves(prev => prev.map(l => l.id === id
+      ? { ...l, status, approverName: user?.name, actionDate: new Date().toISOString(), ...(status === 'Rejected' ? { rejectionReason } : {}) }
+      : l))
+  }
+
+  const approvalRoles = getApprovalRoles(user?.role)
+  const leaveTypes = useMemo(() => [...new Set(leaves.map(l => l.leaveType).filter(Boolean))].sort(), [leaves])
+  const visibleLeaves = useMemo(() => filterLeaves(leaves, filters), [leaves, filters])
+
   const handleApprove = async (id) => {
     if (!window.confirm('Approve this leave request?')) return
     try {
       setProcessingId(id)
       await approveLeave(id)
-      setLeaves(leaves.filter(l => l.id !== id))
+      markDecided(id, 'Approved')
     } catch (err) {
       console.error(err)
       alert('Approve failed: ' + (err.message || 'Unknown error'))
@@ -82,7 +96,7 @@ export default function Approvals(){
     try {
       setProcessingId(id)
       await rejectLeave(id, reason || '')
-      setLeaves(leaves.filter(l => l.id !== id))
+      markDecided(id, 'Rejected', reason || '')
     } catch (err) {
       console.error(err)
       alert('Reject failed: ' + (err.message || 'Unknown error'))
@@ -112,10 +126,27 @@ export default function Approvals(){
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ marginTop: 0 }}>
-        {user?.role === 'management' ? 'Principal Leave Approvals' : 'Pending Approvals'}
+        {user?.role === 'management' ? 'Principal Leave Approvals' : 'Approvals'}
       </h2>
-      {leaves.length === 0 ? (
-        <div style={{ padding: 12, background: '#fff', borderRadius: 8 }}>No pending approvals</div>
+      <p style={{ margin: '-6px 0 18px', color: '#6b7280' }}>
+        Pending requests are shown first. Change the status filter to see requests you have already approved or rejected.
+      </p>
+      <LeaveFilters
+        filters={filters}
+        onChange={setFilters}
+        leaveTypes={leaveTypes}
+        roles={approvalRoles}
+        shown={visibleLeaves.length}
+        total={leaves.length}
+        defaults={defaultFilters}
+        searchPlaceholder="Search name, email, reason..."
+      />
+      {visibleLeaves.length === 0 ? (
+        <div style={{ padding: 12, background: '#fff', borderRadius: 8 }}>
+          {filters.status === 'Pending' && Object.keys(defaultFilters).every(k => filters[k] === defaultFilters[k])
+            ? 'No pending approvals'
+            : 'No leave requests match these filters.'}
+        </div>
       ) : (
         <div style={{ overflowX: 'auto', background: '#fff', padding: 12, borderRadius: 8 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -164,7 +195,7 @@ export default function Approvals(){
               </tr>
             </thead>
             <tbody>
-              {leaves.map(l => (
+              {visibleLeaves.map(l => (
                 <tr key={l.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: 12 }}>
                     <div style={{ fontWeight: 500, color: '#111827' }}>{getField(l.user, 'name', 'email') || 'Unknown'}</div>
@@ -181,7 +212,7 @@ export default function Approvals(){
                   </td>
                   <td style={{ padding: 12, color: '#111827' }}>{formatLeaveDays(l)}</td>
                   <td style={{ padding: 12, color: '#111827' }}>{getField(l, 'reason') || '-'}</td>
-                  <td style={{ padding: 12, color: getField(l, 'status') === 'Rejected' ? '#dc2626' : getField(l, 'status') === 'Approved' ? '#15803d' : '#f59e0b' }}>
+                  <td style={{ padding: 12, color: getField(l, 'status') === 'Rejected' ? '#dc2626' : getField(l, 'status') === 'Approved' ? '#15803d' : getField(l, 'status') === 'Cancelled' ? '#6b7280' : '#f59e0b' }}>
                     {getField(l, 'status') || 'Pending'}
                   </td>
                   <td style={{ padding: 12, color: '#111827' }}>{getDateValue(getField(l, 'createdAt', 'created_at'))}</td>
@@ -194,9 +225,23 @@ export default function Approvals(){
                       <span style={{ color: '#6b7280' }}>None</span>
                     )}
                   </td>
-                  <td style={{ padding: 12 }}>
-                    <button disabled={processingId===l.id} onClick={() => handleApprove(l.id)} style={{ marginRight: 8, padding: '8px 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: processingId===l.id ? 0.6 : 1 }}>Approve</button>
-                    <button disabled={processingId===l.id} onClick={() => handleReject(l.id)} style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: processingId===l.id ? 0.6 : 1 }}>Reject</button>
+                  <td style={{ padding: 12, whiteSpace: 'nowrap' }}>
+                    {l.status === 'Pending' ? (
+                      <>
+                        <button disabled={processingId===l.id} onClick={() => handleApprove(l.id)} style={{ marginRight: 8, padding: '8px 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: processingId===l.id ? 0.6 : 1 }}>Approve</button>
+                        <button disabled={processingId===l.id} onClick={() => handleReject(l.id)} style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', opacity: processingId===l.id ? 0.6 : 1 }}>Reject</button>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 13, color: '#6b7280', whiteSpace: 'normal' }}>
+                        {l.status === 'Cancelled' ? 'Cancelled by applicant' : (
+                          <>
+                            {l.status} {l.approverName ? `by ${l.approverName}` : ''}
+                            {l.actionDate && <div>{getDateValue(l.actionDate)}</div>}
+                            {l.status === 'Rejected' && l.rejectionReason && <div>Reason: {l.rejectionReason}</div>}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

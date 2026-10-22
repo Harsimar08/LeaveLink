@@ -141,6 +141,13 @@ export const fetchCurrentUser = async () => {
   }
 }
 
+// Swap the session token for a fresh one (keeps an active user signed in)
+export const refreshSessionToken = async () => {
+  const data = await apiRequest('/auth/refresh', { method: 'POST' })
+  if (data.token) saveToken(data.token)
+  return data.token
+}
+
 // Logout
 export const logout = () => {
   clearToken()
@@ -257,6 +264,20 @@ export const createLeaveRequest = async (leaveData) => {
     return response.leave
   } catch (error) {
     console.error('Create leave error:', error)
+    throw error
+  }
+}
+
+// Update a pending leave request
+export const updateLeaveRequest = async (leaveId, leaveData) => {
+  try {
+    const response = await apiRequest(`/leaves/${leaveId}`, {
+      method: 'PUT',
+      body: leaveData instanceof FormData ? leaveData : JSON.stringify(leaveData)
+    })
+    return response.leave
+  } catch (error) {
+    console.error('Update leave error:', error)
     throw error
   }
 }

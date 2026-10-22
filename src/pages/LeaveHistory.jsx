@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveRequests } from '../utils/api-auth'
 import { formatLeaveDays } from '../utils/leaveFormat'
+import LeaveFilters, { emptyLeaveFilters, filterLeaves } from '../components/LeaveFilters'
 
 export default function LeaveHistory() {
   const navigate = useNavigate()
   const { user, isAuthenticated } = useAuth()
   const [leaves, setLeaves] = useState([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filteredLeaves, setFilteredLeaves] = useState([])
+  const [filters, setFilters] = useState(emptyLeaveFilters)
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -23,7 +23,7 @@ export default function LeaveHistory() {
       try {
         const all = await getLeaveRequests()
         const ownLeaves = all.filter((leave) => leave.user?.id === user?.id || leave.userId === user?.id)
-        setLeaves(ownLeaves)
+        setLeaves(ownLeaves.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)))
       } catch (err) {
         console.error('Failed to load leave history', err)
       } finally {
@@ -34,60 +34,30 @@ export default function LeaveHistory() {
     load()
   }, [navigate, isAuthenticated, user])
 
-  useEffect(() => {
-    const q = searchTerm.trim().toLowerCase()
-    const filtered = leaves.filter((leave) => {
-      if (!q) return true
-      return [
-        leave.leaveType,
-        leave.reason,
-        leave.createdAt,
-        leave.startDate,
-        leave.endDate,
-        leave.numberOfDays?.toString(),
-        leave.status,
-        leave.actionDate,
-        leave.rejectionReason,
-        leave.attachment
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(q)
-    })
-    setFilteredLeaves(filtered)
-  }, [searchTerm, leaves])
+  const leaveTypes = useMemo(() => [...new Set(leaves.map((leave) => leave.leaveType).filter(Boolean))].sort(), [leaves])
+  const filteredLeaves = useMemo(() => filterLeaves(leaves, filters), [leaves, filters])
 
   if (loading) return <div style={{ padding: 24 }}>Loading leave history...</div>
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Self Leave History</h2>
-          <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Only your own leave records are shown here, including documents uploaded with each request.</p>
-        </div>
-        <div style={{ minWidth: 240, flex: '1 1 240px' }}>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search history..."
-            style={{
-              width: '100%',
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: '1px solid #e5e7eb',
-              background: '#fff',
-              color: '#111827'
-            }}
-          />
-        </div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0 }}>Self Leave History</h2>
+        <p style={{ margin: '8px 0 0', color: '#6b7280' }}>Only your own leave records are shown here, including documents uploaded with each request.</p>
       </div>
+
+      <LeaveFilters
+        filters={filters}
+        onChange={setFilters}
+        leaveTypes={leaveTypes}
+        shown={filteredLeaves.length}
+        total={leaves.length}
+        searchPlaceholder="Search reason, type, remarks..."
+      />
 
       {filteredLeaves.length === 0 ? (
         <div style={{ padding: 24, borderRadius: 16, background: '#fff', color: '#6b7280' }}>
-          No leave requests found.
+          {leaves.length === 0 ? 'No leave requests found.' : 'No leave requests match these filters.'}
         </div>
       ) : (
         <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb' }}>

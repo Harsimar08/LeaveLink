@@ -265,14 +265,31 @@ def update_leave(leave_id):
                 'message': 'Cannot update leave request that is not pending'
             }), 400
         
-        data = request.get_json()
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form.to_dict()
+            file = request.files.get('attachment')
+        else:
+            data = request.get_json() or {}
+            file = None
         
         # Update allowed fields
         if 'leaveType' in data:
             leave.leave_type = data['leaveType']
         if 'reason' in data:
             leave.reason = data['reason'].strip()
-        if 'attachment' in data:
+        if file and file.filename:
+            file_data = file.read()
+            stored = StoredFile(
+                category='attachment',
+                filename=secure_filename(file.filename)[-150:] or 'attachment',
+                content_type=file.mimetype or 'application/octet-stream',
+                size=len(file_data),
+                data=file_data,
+                uploaded_by=user_id
+            )
+            db.session.add(stored)
+            leave.attachment = stored.url
+        elif 'attachment' in data:
             leave.attachment = data['attachment']
         
         if 'startDate' in data and 'endDate' in data:
@@ -353,6 +370,12 @@ def delete_leave(leave_id):
                 'success': False,
                 'message': 'Unauthorized access'
             }), 403
+        
+        if leave.status != 'Pending':
+            return jsonify({
+                'success': False,
+                'message': 'Only pending leave requests can be deleted'
+            }), 400
         
         # Mark as cancelled instead of deleting
         leave.status = 'Cancelled'

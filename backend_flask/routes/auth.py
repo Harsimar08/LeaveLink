@@ -258,6 +258,17 @@ def get_current_user():
             'error': str(e)
         }), 500
 
+# @route   POST /api/auth/refresh
+# @desc    Issue a fresh token so an active session doesn't hit the idle timeout
+# @access  Private
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required()
+def refresh_token():
+    user = safe_db_exec(lambda: User.query.get(int(get_jwt_identity())))
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found', 'authError': True}), 401
+    return jsonify({'success': True, 'token': create_user_token(user)}), 200
+
 # @route   POST /api/auth/change-password
 # @desc    Change user password
 # @access  Private

@@ -2,28 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { apiRequest, getToken } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
 
-const holidays2025 = [
-  { date: '2025-01-26', name: 'Republic Day', type: 'national', day: 'Friday' },
-  { date: '2025-03-08', name: 'Maha Shivaratri', type: 'religious', day: 'Friday' },
-  { date: '2025-03-25', name: 'Holi', type: 'religious', day: 'Monday' },
-  { date: '2025-03-29', name: 'Good Friday', type: 'religious', day: 'Friday' },
-  { date: '2025-04-11', name: 'Eid ul-Fitr', type: 'religious', day: 'Thursday' },
-  { date: '2025-04-17', name: 'Ram Navami', type: 'religious', day: 'Wednesday' },
-  { date: '2025-04-21', name: 'Mahavir Jayanti', type: 'religious', day: 'Sunday' },
-  { date: '2025-05-01', name: 'May Day', type: 'national', day: 'Wednesday' },
-  { date: '2025-05-23', name: 'Buddha Purnima', type: 'religious', day: 'Thursday' },
-  { date: '2025-06-17', name: 'Eid ul-Adha', type: 'religious', day: 'Monday' },
-  { date: '2025-07-17', name: 'Muharram', type: 'religious', day: 'Wednesday' },
-  { date: '2025-08-15', name: 'Independence Day', type: 'national', day: 'Thursday' },
-  { date: '2025-08-26', name: 'Janmashtami', type: 'religious', day: 'Monday' },
-  { date: '2025-09-16', name: 'Milad un-Nabi', type: 'religious', day: 'Monday' },
-  { date: '2025-10-02', name: 'Gandhi Jayanti', type: 'national', day: 'Wednesday' },
-  { date: '2025-10-12', name: 'Dussehra', type: 'religious', day: 'Saturday' },
-  { date: '2025-10-31', name: 'Diwali', type: 'religious', day: 'Thursday' },
-  { date: '2025-11-01', name: 'Diwali (Day 2)', type: 'religious', day: 'Friday' },
-  { date: '2025-11-15', name: 'Guru Nanak Jayanti', type: 'religious', day: 'Friday' },
-  { date: '2025-12-25', name: 'Christmas', type: 'religious', day: 'Wednesday' }
-]
+// Holiday dates are calendar days; parse them in local time so they never shift a day
+const parseDay = (value) => new Date(`${value}T00:00:00`)
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -69,33 +49,76 @@ const IconEmpty = (p) => (
 )
 
 export default function Holidays() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth())
+  const today = new Date()
+  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [viewType, setViewType] = useState('calendar') // 'calendar' or 'list'
   const [filterType, setFilterType] = useState('all') // 'all', 'national', 'religious'
+  const [holidays, setHolidays] = useState([])
+  const [holidaySource, setHolidaySource] = useState(null)
+  const [unreadablePdfs, setUnreadablePdfs] = useState([])
+  const [holidaysLoading, setHolidaysLoading] = useState(true)
+
+  const loadHolidays = async () => {
+    try {
+      const res = await apiRequest('/holidays')
+      const list = res.holidays || []
+      setHolidays(list)
+      setHolidaySource(res.source || null)
+      setUnreadablePdfs(res.unreadable || [])
+      if (list.length) {
+        const now = new Date()
+        const firstYear = parseDay(list[0].date).getFullYear()
+        const lastYear = parseDay(list[list.length - 1].date).getFullYear()
+        if (now.getFullYear() < firstYear || now.getFullYear() > lastYear) {
+          const first = parseDay(list[0].date)
+          setCursor({ year: first.getFullYear(), month: first.getMonth() })
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load holidays', e)
+    } finally {
+      setHolidaysLoading(false)
+    }
+  }
+
+  useEffect(() => { loadHolidays() }, [])
+
+  const yearLabel = useMemo(() => {
+    if (!holidays.length) return ''
+    const first = parseDay(holidays[0].date).getFullYear()
+    const last = parseDay(holidays[holidays.length - 1].date).getFullYear()
+    return first === last ? String(first) : `${first}–${last}`
+  }, [holidays])
 
   const filteredHolidays = useMemo(() => {
-    return holidays2025.filter(holiday => {
+    return holidays.filter(holiday => {
       if (filterType === 'all') return true
       return holiday.type === filterType
     })
-  }, [filterType])
+  }, [holidays, filterType])
 
   const holidaysByMonth = useMemo(() => {
     const grouped = {}
     filteredHolidays.forEach(holiday => {
-      const month = new Date(holiday.date).getMonth()
-      if (!grouped[month]) grouped[month] = []
-      grouped[month].push(holiday)
+      const date = parseDay(holiday.date)
+      const key = `${date.getFullYear()}-${date.getMonth()}`
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(holiday)
     })
     return grouped
   }, [filteredHolidays])
 
-  const currentMonthHolidays = holidaysByMonth[selectedMonth] || []
+  const currentMonthHolidays = holidaysByMonth[`${cursor.year}-${cursor.month}`] || []
+  const moveMonth = (step) => setCursor(({ year, month }) => {
+    const next = new Date(year, month + step, 1)
+    return { year: next.getFullYear(), month: next.getMonth() }
+  })
 
   const upcomingHolidays = useMemo(() => {
-    const today = new Date()
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
     return filteredHolidays
-      .filter(h => new Date(h.date) >= today)
+      .filter(h => parseDay(h.date) >= startOfToday)
       .slice(0, 5)
   }, [filteredHolidays])
 
@@ -138,7 +161,13 @@ export default function Holidays() {
     try {
       const response = await apiRequest('/holidays/pdfs', { method: 'POST', body: form })
       if (response && response.success) {
-        loadPdfs()
+        await Promise.all([loadPdfs(), loadHolidays()])
+        if (response.holidaysFound > 0) {
+          alert(`Holiday list updated: ${response.holidaysFound} holidays found in ${response.filename}.`)
+        } else {
+          alert(`${response.filename} was uploaded, but no holidays could be read from it. ` +
+            'Please upload a text-based PDF (not a scanned image) that lists each holiday with its date.')
+        }
       } else {
         alert(response?.message || 'Upload failed')
       }
@@ -147,6 +176,7 @@ export default function Holidays() {
       alert('Upload failed: ' + (e.message || e))
     } finally {
       setUploading(false)
+      ev.target.value = ''
     }
   }
 
@@ -154,7 +184,7 @@ export default function Holidays() {
     if (!confirm('Delete this PDF?')) return
     try {
       await apiRequest(`/holidays/pdfs/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-      loadPdfs()
+      await Promise.all([loadPdfs(), loadHolidays()])
     } catch (e) {
       console.error(e)
       alert('Delete failed')
@@ -199,15 +229,18 @@ export default function Holidays() {
           Institute Calendar
         </div>
         <h2 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 600, color: COLORS.ink900 }}>
-          Holidays 2025
+          Holidays {yearLabel}
         </h2>
         <div style={{ color: COLORS.ink600, fontSize: 14.5, marginTop: 8 }}>
-          A full year of national and religious holidays observed at JIMS.
+          {holidaySource
+            ? <>Holidays observed at JIMS, as listed in <a href={holidaySource.url} target="_blank" rel="noreferrer" style={{ color: COLORS.navy800, fontWeight: 600 }}>{holidaySource.filename}</a>.</>
+            : 'Holidays observed at JIMS, as listed in the institute holiday PDF.'}
         </div>
       </div>
 
       <div style={{ maxWidth: 1160, margin: '0 auto' }}>
 
+        {holidays.length > 0 && (<>
         {/* Stats Cards */}
         <div style={{
           display: 'grid',
@@ -261,11 +294,34 @@ export default function Holidays() {
             </button>
           </div>
         </div>
+        </>)}
 
         <div className="tto-holiday-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
           {/* Main Content */}
           <div>
-            {viewType === 'calendar' ? (
+            {holidaysLoading ? (
+              <div style={{ ...cardStyle, textAlign: 'center', padding: '56px 20px', color: COLORS.ink600, fontSize: 14 }}>
+                Loading holidays...
+              </div>
+            ) : holidays.length === 0 ? (
+              <div style={{ ...cardStyle, textAlign: 'center', padding: '56px 24px', color: COLORS.ink600 }}>
+                <IconEmpty style={{ width: 38, height: 38, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.4, marginBottom: 14 }} />
+                <div style={{ fontSize: 17, fontWeight: 700, color: COLORS.ink900, marginBottom: 8 }}>
+                  {unreadablePdfs.length > 0 ? 'The uploaded holiday list could not be read.' : 'No holiday list has been uploaded yet.'}
+                </div>
+                {unreadablePdfs.length > 0 ? (
+                  <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 460, margin: '0 auto' }}>
+                    No holidays could be read from {unreadablePdfs.join(', ')}. The PDF must contain selectable text (not a scanned image) listing each holiday with its date.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                    {user?.role === 'principal'
+                      ? 'Upload the institute holiday PDF using “Upload PDF” and the holidays will appear here.'
+                      : 'Holidays will appear here once the Principal uploads the institute holiday list.'}
+                  </div>
+                )}
+              </div>
+            ) : viewType === 'calendar' ? (
               <div style={cardStyle}>
                 {/* Month Selector */}
                 <div style={{
@@ -277,7 +333,7 @@ export default function Holidays() {
                   borderBottom: `1px solid ${COLORS.line}`
                 }}>
                   <button
-                    onClick={() => setSelectedMonth(prev => (prev === 0 ? 11 : prev - 1))}
+                    onClick={() => moveMonth(-1)}
                     aria-label="Previous month"
                     style={{
                       background: COLORS.paper,
@@ -292,10 +348,10 @@ export default function Holidays() {
                     <IconChevronLeft style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} />
                   </button>
                   <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: COLORS.ink900 }}>
-                    {monthNames[selectedMonth]} 2025
+                    {monthNames[cursor.month]} {cursor.year}
                   </h3>
                   <button
-                    onClick={() => setSelectedMonth(prev => (prev === 11 ? 0 : prev + 1))}
+                    onClick={() => moveMonth(1)}
                     aria-label="Next month"
                     style={{
                       background: COLORS.paper,
@@ -339,10 +395,10 @@ export default function Holidays() {
                           minWidth: 62,
                         }}>
                           <div style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600 }}>
-                            {new Date(holiday.date).getDate()}
+                            {parseDay(holiday.date).getDate()}
                           </div>
                           <div style={{ fontSize: 12, opacity: 0.85, letterSpacing: '0.03em' }}>
-                            {monthNames[new Date(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
+                            {monthNames[parseDay(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
                           </div>
                         </div>
                         <div style={{ flex: 1 }}>
@@ -372,14 +428,14 @@ export default function Holidays() {
                 ) : (
                   <div style={{ textAlign: 'center', padding: '56px 20px', color: COLORS.ink600 }}>
                     <IconEmpty style={{ width: 34, height: 34, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.4, marginBottom: 14 }} />
-                    <div style={{ fontSize: 14 }}>No holidays in {monthNames[selectedMonth]}</div>
+                    <div style={{ fontSize: 14 }}>No holidays in {monthNames[cursor.month]} {cursor.year}</div>
                   </div>
                 )}
               </div>
             ) : (
               <div style={cardStyle}>
                 <h3 style={{ margin: '0 0 18px 0', fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: COLORS.ink900 }}>
-                  All Holidays 2025
+                  All Holidays {yearLabel}
                 </h3>
                 <div style={{ display: 'grid', gap: 10 }}>
                   {filteredHolidays.map((holiday, idx) => (
@@ -405,10 +461,10 @@ export default function Holidays() {
                         minWidth: 62,
                       }}>
                         <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600 }}>
-                          {new Date(holiday.date).getDate()}
+                          {parseDay(holiday.date).getDate()}
                         </div>
                         <div style={{ fontSize: 12, opacity: 0.85 }}>
-                          {monthNames[new Date(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
+                          {monthNames[parseDay(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
                         </div>
                       </div>
                       <div style={{ flex: 1 }}>
@@ -458,6 +514,7 @@ export default function Holidays() {
                 ))}
               </div>
             </div>
+            {holidays.length > 0 && (<>
             {/* Upcoming Holidays */}
             <div style={{ ...cardStyle, marginBottom: 20 }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '0 0 16px 0', fontSize: 15.5, fontWeight: 700, color: COLORS.ink900 }}>
@@ -479,7 +536,7 @@ export default function Holidays() {
                       {holiday.name}
                     </div>
                     <div style={{ fontSize: 13, color: COLORS.ink600 }}>
-                      {new Date(holiday.date).toLocaleDateString('en-US', {
+                      {parseDay(holiday.date).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
                         year: 'numeric'
@@ -511,10 +568,11 @@ export default function Holidays() {
                 Did you know?
               </h3>
               <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', position: 'relative', zIndex: 1 }}>
-                You have <strong style={{ color: COLORS.gold300 }}>{stats.longWeekends} long weekends</strong> this year —
+                You have <strong style={{ color: COLORS.gold300 }}>{stats.longWeekends} long weekends</strong> in this holiday list —
                 good opportunities to plan ahead with your department.
               </div>
             </div>
+            </>)}
           </div>
         </div>
       </div>
