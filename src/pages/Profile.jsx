@@ -1,28 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { updateUserProfile } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
+import { Icon, Spinner } from '../components/ui'
 
-// ===== Corporate Theme Tokens =====
+// Shared design tokens from styles.css
 const C = {
-  navy950: '#0B1D30',
-  navy900: '#122B45',
-  navy800: '#1B3A5C',
-  gold600: '#B08A2E',
-  gold500: '#C9A227',
-  gold100: '#FDF8EC',
-  paper:   '#F4F6F9',
-  card:    '#FFFFFF',
-  line:    '#EAEFF5',
-  ink900:  '#182230',
-  ink600:  '#4B5768',
-  ink400:  '#94A3B8',
-  green700:'#256B4C',
-  green100:'#E4F2EA',
-  red700:  '#A73A3A',
-  red100:  '#F7E7E6'
+  navy950: 'var(--navy-950)',
+  navy900: 'var(--navy-900)',
+  navy800: 'var(--navy-800)',
+  gold600: 'var(--gold-700)',
+  gold500: 'var(--gold-500)',
+  gold100: 'var(--gold-100)',
+  paper:   'var(--paper)',
+  card:    'var(--surface)',
+  line:    'var(--line)',
+  ink900:  'var(--ink-900)',
+  ink600:  'var(--ink-600)',
+  ink400:  'var(--ink-400)',
+  green700:'var(--success)',
+  green100:'var(--success-bg)',
+  red700:  'var(--danger)',
+  red100:  'var(--danger-bg)'
 }
-const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
-const shadowSoft = '0 2px 10px rgba(15, 29, 48, 0.04), 0 1px 3px rgba(15, 29, 48, 0.02)'
+const serif = { fontFamily: 'var(--font-serif)' }
+const shadowSoft = 'var(--shadow)'
 
 const toProfileState = (source) => ({
   name: source?.name || '',
@@ -274,12 +275,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="profile-page" style={{
+    <div className="profile-page ui-page" style={{
       width: '100%',
-      minHeight: '100vh',
-      background: C.paper,
-      padding: '28px 40px 60px',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       color: C.ink900,
       boxSizing: 'border-box'
     }}>
@@ -346,7 +343,7 @@ export default function Profile() {
             fontWeight: 600,
             marginBottom: 16
           }}>
-            <span style={{ animation: 'spin 1s linear infinite' }}>⏳</span>
+            <Spinner size={14} />
             Saving profile changes...
           </div>
         )}
@@ -360,9 +357,12 @@ export default function Profile() {
             color: message.type === 'success' ? C.green700 : C.red700,
             border: `1px solid ${message.type === 'success' ? '#CFE7DA' : '#EFD4D2'}`,
             fontSize: '13.5px',
-            fontWeight: 600
-          }}>
-            {message.type === 'success' ? '✓ ' : '⚠️ '}
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }} role={message.type === 'success' ? 'status' : 'alert'}>
+            <Icon name={message.type === 'success' ? 'checkCircle' : 'alert'} size={17} />
             {message.text}
           </div>
         )}
@@ -428,6 +428,7 @@ export default function Profile() {
                     type="button"
                     onClick={() => fileInputRef.current && fileInputRef.current.click()}
                     title="Change profile picture"
+                    aria-label="Change profile picture"
                     style={{
                       position: 'absolute',
                       bottom: '-6px',
@@ -446,7 +447,7 @@ export default function Profile() {
                       transition: 'transform 0.15s ease'
                     }}
                   >
-                    ✏️
+                    <Icon name="edit" size={15} />
                   </button>
                   <input
                     type="file"
@@ -551,9 +552,7 @@ export default function Profile() {
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap');
         @media (max-width: 600px) {
-          .profile-page { padding: 20px 14px 40px !important; }
           .profile-page .card-box { padding: 20px 16px !important; }
           .profile-page .prof-grid { grid-template-columns: minmax(0, 1fr) !important; }
         }

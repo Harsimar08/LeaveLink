@@ -1,811 +1,485 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { createLeaveRequest, getLeaveRequests, updateLeaveRequest, cancelLeave } from '../utils/api-auth';
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { createLeaveRequest, updateLeaveRequest, cancelLeave } from '../utils/api-auth'
+import { useLeaves, upsertLeave, patchLeave } from '../utils/leavesStore'
+import { useHolidays, holidaysBetween } from '../utils/holidays'
+import { useFeedback } from '../components/ui/Feedback'
+import { Dialog } from '../components/ui/Dialog'
+import { Card, Icon, Notice, PageHeader, Skeleton, Spinner, StatusChip } from '../components/ui'
+import useUnsavedWarning from '../utils/useUnsavedWarning'
+import { WEEKDAYS, formatDate, formatRange, parseDay, todayISO } from '../utils/dates'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
 const leaveTypeLabels = {
   CL: 'Casual Leave',
   EL: 'Earned Leave',
   OD: 'On Duty Leave',
-  AL: 'Academic Leave'
-};
-
-const leaveTypeIdFor = (name) =>
-  Object.keys(leaveTypeLabels).find((id) => id === name || leaveTypeLabels[id] === name) || '';
-
-const SUBMIT_SUCCESS_MESSAGE = 'Your leave request has been submitted successfully.';
-const UPDATE_SUCCESS_MESSAGE = 'Your leave request has been updated successfully.';
-
-const emptyForm = {
-  leaveType: '',
-  reason: '',
-  startDate: '',
-  endDate: '',
-  halfDay: false,
-  emergencyContact: '',
-  attachments: null
-};
-
-const COLORS = {
-  navy950: '#0a1220',
-  navy900: '#0e1a2e',
-  navy800: '#152742',
-  navy700: '#1c3357',
-  gold500: '#c79a3a',
-  gold300: '#e8c877',
-  goldTint: '#f7ecd0',
-  paper: '#f6f7f9',
-  white: '#ffffff',
-  ink900: '#101826',
-  ink600: '#5b6779',
-  ink400: '#94a0b3',
-  line: '#e6e9ef',
-  success: '#1f8a5f',
-  successTint: '#e7f5ee',
-  danger: '#c0553c',
-  dangerTint: '#fbeee9',
-  pending: '#b8862f',
-  pendingTint: '#faf1de',
-};
-
-// ---- Icons (inline SVG, no emoji) ----
-const IconLeaf = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M4 20c8 1 15-5 16-16C11 3 5 10 4 20Z" /><path d="M5 19c3-4 6-7 11-11" /></svg>
-)
-const IconBriefcase = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><rect x="3" y="8" width="18" height="12" rx="2" /><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-)
-const IconClipboard = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><rect x="4" y="4" width="16" height="17" rx="2" /><path d="M9 3h6v3H9z" /><path d="M9 11h6M9 15h4" /></svg>
-)
-const IconCap = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M12 3 1 8l11 5 9-4.09V17h2V8L12 3Z" /><path d="M5 10.5V16c0 2 3 3.5 7 3.5s7-1.5 7-3.5v-5.5" /></svg>
-)
-const IconUpload = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
-)
-const IconCheck = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" /></svg>
-)
-const IconAlert = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="9" /><path d="M12 8v5" /><path d="M12 16h.01" /></svg>
-)
-const IconSpinner = (p) => (
-  <svg viewBox="0 0 24 24" className="tto-spin" {...p}><path d="M12 3a9 9 0 1 0 9 9" /></svg>
-)
-const IconFile = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M6 2h9l5 5v15H6Z" /><path d="M15 2v5h5" /></svg>
-)
-const IconList = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>
-)
+  AL: 'Academic Leave',
+}
 
 const leaveTypeOptions = [
-  { id: 'CL', name: 'Casual Leave', Icon: IconLeaf },
-  { id: 'EL', name: 'Earned Leave', Icon: IconBriefcase },
-  { id: 'OD', name: 'On Duty', Icon: IconClipboard },
-  { id: 'AL', name: 'Academic Leave', Icon: IconCap },
-];
+  { id: 'CL', name: 'Casual Leave', icon: 'sun', hint: 'Short personal absence' },
+  { id: 'EL', name: 'Earned Leave', icon: 'calendar', hint: 'Planned, longer leave' },
+  { id: 'OD', name: 'On Duty', icon: 'building', hint: 'Official college work' },
+  { id: 'AL', name: 'Academic Leave', icon: 'cap', hint: 'FDPs, conferences, exams' },
+]
+
+const leaveTypeIdFor = (name) =>
+  Object.keys(leaveTypeLabels).find((id) => id === name || leaveTypeLabels[id] === name) || ''
+
+const SUBMIT_SUCCESS_MESSAGE = 'Your leave request has been submitted successfully.'
+const UPDATE_SUCCESS_MESSAGE = 'Your leave request has been updated successfully.'
+const MAX_REASON = 500
+const MAX_FILE_BYTES = 10 * 1024 * 1024
+
+const emptyForm = { leaveType: '', reason: '', startDate: '', endDate: '', halfDay: false, emergencyContact: '', attachments: null }
+
+const formFromRequest = (request) => ({
+  leaveType: leaveTypeIdFor(request.leaveType),
+  reason: request.reason || '',
+  startDate: (request.startDate || '').slice(0, 10),
+  endDate: (request.endDate || request.startDate || '').slice(0, 10),
+  halfDay: !!request.isHalfDay,
+  emergencyContact: '',
+  attachments: null,
+})
+
+const sameForm = (a, b) =>
+  a.leaveType === b.leaveType && a.reason === b.reason && a.startDate === b.startDate &&
+  a.endDate === b.endDate && a.halfDay === b.halfDay && a.emergencyContact === b.emergencyContact &&
+  !a.attachments && !b.attachments
+
+const weekdayOf = (iso) => {
+  const d = parseDay(iso)
+  return d ? WEEKDAYS[d.getDay()] : ''
+}
 
 export default function LeaveRequest() {
-  const { user } = useAuth();
+  const { user } = useAuth()
+  const { confirm, toast } = useFeedback()
+  const { leaves, loading: loadingRequests } = useLeaves()
+  const { holidays } = useHolidays()
+  const fileInputRef = useRef(null)
 
-  const [formData, setFormData] = useState(emptyForm);
-
-  const [calculatedDays, setCalculatedDays] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [leaveRequests, setLeaveRequests] = useState([]);
-  const [recentRequests, setRecentRequests] = useState([]);
-  const [loadingRequests, setLoadingRequests] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [dropHover, setDropHover] = useState(false);
-  const [editingRequest, setEditingRequest] = useState(null);
+  const [formData, setFormData] = useState(emptyForm)
+  const [errors, setErrors] = useState({})
+  const [successMessage, setSuccessMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [editingRequest, setEditingRequest] = useState(null)
   // null | 'confirm' | 'success'
-  const [dialog, setDialog] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+  const [dialog, setDialog] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const recentRequests = useMemo(() => (
+    leaves
+      .filter((leave) => (leave.user?.id === user?.id || leave.userId === user?.id) && leave.status !== 'Cancelled')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5)
+  ), [leaves, user?.id])
+
+  const calculatedDays = useMemo(() => {
+    if (!formData.startDate || !formData.endDate) return 0
+    if (formData.halfDay) return 0.5
+    const diff = Math.round((parseDay(formData.endDate) - parseDay(formData.startDate)) / 86400000)
+    return Math.abs(diff) + 1
+  }, [formData.startDate, formData.endDate, formData.halfDay])
+
+  const durationLabel = formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`
+  const baseline = editingRequest ? formFromRequest(editingRequest) : emptyForm
+  const dirty = !sameForm(formData, baseline)
+  const datesValid = formData.startDate && formData.endDate && formData.endDate >= formData.startDate
+  const holidaysInRange = datesValid ? holidaysBetween(holidays, formData.startDate, formData.endDate) : []
+  const approverLabel = user?.role === 'principal' ? 'Management' : 'the Principal'
+
+  useUnsavedWarning(dirty && !submitting && !dialog, {
+    title: editingRequest ? 'Discard your changes?' : 'Leave without submitting?',
+    message: editingRequest
+      ? 'Your changes to this leave request have not been saved.'
+      : 'Your leave application has not been submitted. If you leave now, what you entered will be lost.',
+  })
 
   useEffect(() => {
-    if (!successMessage || dialog === 'success') return;
-    const timer = setTimeout(() => setSuccessMessage(''), 6000);
-    return () => clearTimeout(timer);
-  }, [successMessage, dialog]);
+    if (!successMessage || dialog === 'success') return undefined
+    const timer = setTimeout(() => setSuccessMessage(''), 6000)
+    return () => clearTimeout(timer)
+  }, [successMessage, dialog])
 
-  useEffect(() => {
-    if (!dialog) return;
-    const onKey = (e) => { if (e.key === 'Escape' && !submitting) setDialog(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, submitting]);
+  const update = (name, value) => {
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value }
+      if (next.halfDay && (name === 'halfDay' || name === 'startDate')) next.endDate = next.startDate
+      return next
+    })
+    setErrors((prev) => ({ ...prev, [name]: '' }))
+  }
 
-  // Load recent leave requests from database
-  useEffect(() => {
-    if (!user) return
-    loadRecentRequests();
-  }, [user]);
-
-  const loadRecentRequests = async () => {
-    try {
-      setLoadingRequests(true);
-      const leaves = await getLeaveRequests();
-      const filtered = leaves.filter((leave) =>
-        (leave.user?.id === user?.id || leave.userId === user?.id) && leave.status !== 'Cancelled'
-      )
-      const sorted = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      setLeaveRequests(sorted)
-      setRecentRequests(sorted.slice(0, 5))
-    } catch (error) {
-      console.error('Error loading leave requests:', error);
-    } finally {
-      setLoadingRequests(false);
-    }
-  };
-
-  // Calculate days when dates change
-  useEffect(() => {
-    if (formData.startDate && formData.endDate) {
-      const start = new Date(formData.startDate);
-      const end = new Date(formData.endDate);
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      setCalculatedDays(formData.halfDay ? 0.5 : diffDays);
-    } else {
-      setCalculatedDays(0);
-    }
-  }, [formData.startDate, formData.endDate, formData.halfDay]);
-
-  // Update selected leave info
   const handleChange = (e) => {
-    const { name, value, type, checked, files } = e.target;
-    setFormData(prev => {
-      const next = {
-        ...prev,
-        [name]: type === 'checkbox' ? checked : type === 'file' ? files[0] : value
-      };
-      if (next.halfDay && (name === 'halfDay' || name === 'startDate')) {
-        next.endDate = next.startDate;
-      }
-      return next;
-    });
-    // Clear error for this field
-    setErrors(prev => ({ ...prev, [name]: '' }));
-  };
+    const { name, value, type, checked } = e.target
+    update(name, type === 'checkbox' ? checked : value)
+  }
+
+  const pickFile = (file) => {
+    if (!file) return
+    if (file.size > MAX_FILE_BYTES) {
+      setErrors((prev) => ({ ...prev, attachments: 'This file is larger than 10 MB. Please choose a smaller file.' }))
+      return
+    }
+    update('attachments', file)
+  }
+
+  const clearFile = () => {
+    update('attachments', null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const validateForm = () => {
-    const newErrors = {};
-    if (!formData.leaveType) newErrors.leaveType = 'Please select a leave type';
-    if (!formData.reason.trim()) newErrors.reason = 'Please provide a reason';
-    if (!formData.startDate) newErrors.startDate = 'Please select start date';
-    if (!formData.endDate) newErrors.endDate = 'Please select end date';
-    if (formData.startDate && formData.endDate && new Date(formData.endDate) < new Date(formData.startDate)) {
-      newErrors.endDate = 'End date must be after start date';
+    const newErrors = {}
+    if (!formData.leaveType) newErrors.leaveType = 'Please select a leave type'
+    if (!formData.reason.trim()) newErrors.reason = 'Please provide a reason'
+    if (!formData.startDate) newErrors.startDate = 'Please select start date'
+    if (!formData.endDate) newErrors.endDate = 'Please select end date'
+    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
+      newErrors.endDate = 'End date must be after start date'
     }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const resetForm = () => {
-    setFormData(emptyForm);
-    setEditingRequest(null);
-    setErrors({});
-    const fileInput = document.getElementById('fileInput');
-    if (fileInput) fileInput.value = '';
-  };
+    setFormData(emptyForm)
+    setEditingRequest(null)
+    setErrors({})
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    if (validateForm()) setDialog('confirm');
-  };
+    e.preventDefault()
+    if (validateForm()) setDialog('confirm')
+    else document.querySelector('.leave-form [aria-invalid="true"], .leave-form .ui-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
-  const startEditing = (request) => {
-    setEditingRequest(request);
-    setSuccessMessage('');
-    setErrors({});
-    setFormData({
-      leaveType: leaveTypeIdFor(request.leaveType),
-      reason: request.reason || '',
-      startDate: (request.startDate || '').slice(0, 10),
-      endDate: (request.endDate || request.startDate || '').slice(0, 10),
-      halfDay: !!request.isHalfDay,
-      emergencyContact: '',
-      attachments: null
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const startEditing = async (request) => {
+    if (dirty && editingRequest?.id !== request.id) {
+      const ok = await confirm({
+        title: 'Discard what you have entered?',
+        message: 'Editing another request will replace the details currently in the form.',
+        confirmLabel: 'Discard and edit',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
+    setEditingRequest(request)
+    setSuccessMessage('')
+    setErrors({})
+    setFormData(formFromRequest(request))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const handleDelete = async (request) => {
-    const id = request._id || request.id;
-    if (!window.confirm('Delete this leave request? This cannot be undone.')) return;
+    const id = request._id || request.id
+    const ok = await confirm({
+      title: 'Delete this leave request?',
+      message: `${request.leaveType} · ${formatRange(request.startDate, request.endDate)}. This cannot be undone.`,
+      confirmLabel: 'Delete request',
+      tone: 'danger',
+      icon: 'trash',
+    })
+    if (!ok) return
     try {
-      setDeletingId(id);
-      await cancelLeave(id);
-      if (editingRequest && (editingRequest._id || editingRequest.id) === id) resetForm();
-      await loadRecentRequests();
+      setDeletingId(id)
+      await cancelLeave(id)
+      patchLeave(id, { status: 'Cancelled', updatedAt: new Date().toISOString() })
+      if (editingRequest && (editingRequest._id || editingRequest.id) === id) resetForm()
+      toast('Leave request deleted.', 'success')
     } catch (error) {
-      alert('Delete failed: ' + (error.message || 'Unknown error'));
+      toast(`Couldn't delete the request: ${error.message || 'please try again.'}`, 'error')
     } finally {
-      setDeletingId(null);
+      setDeletingId(null)
     }
-  };
+  }
 
   const confirmSubmit = async () => {
-    if (validateForm()) {
-      try {
-        setSubmitting(true);
-        setErrors({});
-
-        // Prepare leave request data for API
-        // Backend expects: leaveType, startDate, endDate, numberOfDays, reason, attachment (optional)
-        const leaveTypeName = leaveTypeLabels[formData.leaveType] || formData.leaveType
-        const endDate = formData.halfDay ? formData.startDate : formData.endDate
-        let leaveRequestData
-        if (formData.attachments) {
-          const form = new FormData()
-          form.append('leaveType', leaveTypeName)
-          form.append('reason', formData.reason)
-          form.append('startDate', formData.startDate)
-          form.append('endDate', endDate)
-          form.append('numberOfDays', calculatedDays)
-          form.append('halfDay', formData.halfDay ? 'true' : 'false')
-          form.append('attachment', formData.attachments)
-          leaveRequestData = form
-        } else {
-          leaveRequestData = {
-            leaveType: leaveTypeName,
-            reason: formData.reason,
-            startDate: formData.startDate,
-            endDate,
-            numberOfDays: calculatedDays,
-            halfDay: formData.halfDay,
-            attachment: null
-          }
+    if (!validateForm()) return
+    try {
+      setSubmitting(true)
+      setErrors({})
+      const leaveTypeName = leaveTypeLabels[formData.leaveType] || formData.leaveType
+      const endDate = formData.halfDay ? formData.startDate : formData.endDate
+      let leaveRequestData
+      if (formData.attachments) {
+        const form = new FormData()
+        form.append('leaveType', leaveTypeName)
+        form.append('reason', formData.reason)
+        form.append('startDate', formData.startDate)
+        form.append('endDate', endDate)
+        form.append('numberOfDays', calculatedDays)
+        form.append('halfDay', formData.halfDay ? 'true' : 'false')
+        form.append('attachment', formData.attachments)
+        leaveRequestData = form
+      } else {
+        leaveRequestData = {
+          leaveType: leaveTypeName,
+          reason: formData.reason,
+          startDate: formData.startDate,
+          endDate,
+          numberOfDays: calculatedDays,
+          halfDay: formData.halfDay,
+          attachment: null,
         }
-
-        if (editingRequest) {
-          if (!formData.attachments) delete leaveRequestData.attachment;
-          await updateLeaveRequest(editingRequest._id || editingRequest.id, leaveRequestData);
-        } else {
-          await createLeaveRequest(leaveRequestData);
-        }
-
-        setSuccessMessage(editingRequest ? UPDATE_SUCCESS_MESSAGE : SUBMIT_SUCCESS_MESSAGE);
-        setDialog('success');
-        resetForm();
-
-        // Reload recent requests
-        await loadRecentRequests();
-
-      } catch (error) {
-        console.error('Error submitting leave request:', error);
-        setDialog(null);
-        setErrors({ submit: error.message || 'Failed to submit leave request. Please try again.' });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } finally {
-        setSubmitting(false);
       }
+
+      let saved
+      if (editingRequest) {
+        if (!formData.attachments) delete leaveRequestData.attachment
+        saved = await updateLeaveRequest(editingRequest._id || editingRequest.id, leaveRequestData)
+      } else {
+        saved = await createLeaveRequest(leaveRequestData)
+      }
+      if (saved) upsertLeave(saved)
+
+      setSuccessMessage(editingRequest ? UPDATE_SUCCESS_MESSAGE : SUBMIT_SUCCESS_MESSAGE)
+      setDialog('success')
+      resetForm()
+    } catch (error) {
+      setDialog(null)
+      setErrors({ submit: error.message || 'Failed to submit leave request. Please try again.' })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setSubmitting(false)
     }
-  };
+  }
 
-  const cardStyle = {
-    background: COLORS.white,
-    borderRadius: 16,
-    border: `1px solid ${COLORS.line}`,
-    boxShadow: '0 1px 3px rgba(16,24,38,0.05)',
-    padding: 32,
-    marginBottom: 24,
-  };
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: `1.5px solid ${COLORS.line}`,
-    fontSize: 14,
-    background: COLORS.white,
-    color: COLORS.ink900,
-    fontFamily: "'Inter', sans-serif",
-    outline: 'none',
-    boxSizing: 'border-box',
-    transition: 'border-color .15s ease, box-shadow .15s ease',
-  };
-
-  const labelStyle = {
-    display: 'block',
-    fontWeight: 600,
-    marginBottom: 8,
-    color: COLORS.ink600,
-    fontSize: 13,
-    letterSpacing: '0.03em',
-    textTransform: 'uppercase',
-  };
-
-  const rowButtonStyle = (enabled, color) => ({
-    padding: '6px 12px',
-    borderRadius: 8,
-    border: `1px solid ${enabled ? color : COLORS.line}`,
-    background: COLORS.white,
-    color: enabled ? color : COLORS.ink400,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: enabled ? 'pointer' : 'not-allowed',
-  });
-
-  const dialogButtonStyle = (primary) => ({
-    flex: 1,
-    padding: '12px 16px',
-    borderRadius: 10,
-    border: primary ? 'none' : `1px solid ${COLORS.line}`,
-    background: primary ? (submitting ? COLORS.ink400 : COLORS.navy900) : COLORS.white,
-    color: primary ? COLORS.white : COLORS.ink900,
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: submitting ? 'not-allowed' : 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-  });
-
-  const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
-
-  const statusStyles = {
-    approved: { color: COLORS.success, bg: COLORS.successTint },
-    rejected: { color: COLORS.danger, bg: COLORS.dangerTint },
-    pending: { color: COLORS.pending, bg: COLORS.pendingTint },
-  };
+  const minDate = editingRequest ? undefined : todayISO()
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 64px)', background: COLORS.paper, padding: '40px 24px', fontFamily: "'Inter', sans-serif" }}>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes tto-spin-kf { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .tto-spin { animation: tto-spin-kf 0.9s linear infinite; }
-        @media (max-width: 520px) {
-          .tto-date-grid { grid-template-columns: minmax(0, 1fr) !important; }
-        }
-        .tto-field:focus { border-color: ${COLORS.navy700} !important; box-shadow: 0 0 0 3px rgba(21,39,66,0.10); }
-        .tto-row:hover { transform: translateX(3px); }
-      `}</style>
+    <div className="ui-page leave-apply">
+      <PageHeader
+        eyebrow="My leave"
+        title={editingRequest ? 'Edit Leave Request' : 'New Leave Request'}
+        subtitle={editingRequest
+          ? 'Update your pending leave request below, then submit the changes.'
+          : `Fill in the details below. ${approverLabel === 'Management' ? 'Management' : 'The Principal'} is notified by email as soon as you submit.`}
+        actions={<Link to="/leave-history" className="ui-btn ui-btn--secondary"><Icon name="history" size={17} />My leaves</Link>}
+      />
 
-      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
-            Leave Management
-          </div>
-          <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 32, color: COLORS.ink900, margin: 0 }}>
-            {editingRequest ? 'Edit Leave Request' : 'New Leave Request'}
-          </h1>
-          <p style={{ marginTop: 8, fontSize: 14.5, color: COLORS.ink600 }}>
-            {editingRequest
-              ? 'Update your pending leave request below, then submit the changes.'
-              : 'Submit your leave application — your reporting authority will be notified for approval.'}
-          </p>
-        </div>
+      {successMessage && dialog !== 'success' && (
+        <Notice tone="success" style={{ marginBottom: 20 }}><strong>{successMessage}</strong></Notice>
+      )}
+      {errors.submit && <Notice tone="danger" style={{ marginBottom: 20 }}><strong>{errors.submit}</strong></Notice>}
 
-        {/* Success Message */}
-        {successMessage && dialog !== 'success' && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: COLORS.successTint,
-            border: `1px solid ${COLORS.success}33`,
-            borderRadius: 14,
-            padding: '16px 20px',
-            marginBottom: 24,
-            animation: 'fadeIn 0.25s ease-out',
-          }}>
-            <IconCheck style={{ width: 22, height: 22, stroke: COLORS.success, fill: 'none', strokeWidth: 1.8, flexShrink: 0 }} />
-            <strong style={{ color: COLORS.success, fontSize: 14, fontWeight: 600 }}>
-              {successMessage}
-            </strong>
-          </div>
-        )}
+      <div className="ui-grid ui-grid--main">
+        <form id="leave-form" className="leave-form ui-stack" onSubmit={handleSubmit} noValidate>
+          {editingRequest && (
+            <Notice tone="warning" icon="edit">
+              <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span>You are editing your {editingRequest.leaveType} request for {formatRange(editingRequest.startDate, editingRequest.endDate)}.</span>
+                <button type="button" className="ui-btn ui-btn--secondary ui-btn--sm" onClick={resetForm}>Cancel editing</button>
+              </span>
+            </Notice>
+          )}
 
-        {/* Error Message */}
-        {errors.submit && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            background: COLORS.dangerTint,
-            border: `1px solid ${COLORS.danger}33`,
-            borderRadius: 14,
-            padding: '16px 20px',
-            marginBottom: 24,
-            animation: 'fadeIn 0.25s ease-out',
-          }}>
-            <IconAlert style={{ width: 22, height: 22, stroke: COLORS.danger, fill: 'none', strokeWidth: 1.8, flexShrink: 0 }} />
-            <strong style={{ color: COLORS.danger, fontSize: 14, fontWeight: 600 }}>{errors.submit}</strong>
-          </div>
-        )}
-
-        {/* Main Form */}
-        <form onSubmit={handleSubmit}>
-          <div style={cardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: COLORS.ink900, letterSpacing: '0.01em' }}>
-                {editingRequest ? 'Editing Leave Request' : 'Leave Details'}
-              </h3>
-              {editingRequest && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  style={{ background: 'none', border: `1px solid ${COLORS.line}`, borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 600, color: COLORS.ink600, cursor: 'pointer' }}
-                >
-                  Cancel editing
-                </button>
-              )}
-            </div>
-
-            {/* Type of Leave - selectable cards */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Type of Leave *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 4 }}>
-                {leaveTypeOptions.map((opt) => {
-                  const isActive = formData.leaveType === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, leaveType: opt.id }))}
-                      aria-pressed={isActive}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '13px 14px',
-                        borderRadius: 12,
-                        border: `1.5px solid ${isActive ? COLORS.navy800 : COLORS.line}`,
-                        background: isActive ? COLORS.navy900 : COLORS.white,
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        transition: 'border-color .15s ease, background .15s ease, transform .1s ease',
-                      }}
-                    >
-                      <span style={{
-                        width: 34, height: 34, borderRadius: 9,
-                        background: isActive ? COLORS.gold500 : COLORS.paper,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      }}>
-                        <opt.Icon style={{ width: 17, height: 17, stroke: isActive ? COLORS.navy950 : COLORS.navy800, fill: 'none', strokeWidth: 1.8 }} />
-                      </span>
-                      <span style={{ fontSize: 13.5, fontWeight: 600, color: isActive ? COLORS.white : COLORS.ink900 }}>
-                        {opt.id} — {opt.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {errors.leaveType && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.leaveType}</div>}
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Reason for Leave *</label>
-              <textarea
-                className="tto-field"
-                name="reason"
-                value={formData.reason}
-                onChange={handleChange}
-                placeholder="Provide a brief, clear reason for your leave request..."
-                rows="4"
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
-              />
-              {errors.reason && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.reason}</div>}
-            </div>
-
-            {/* Dates */}
-            <div className="tto-date-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
-              <div>
-                <label style={labelStyle}>Start Date *</label>
-                <input
-                  className="tto-field"
-                  type="date"
-                  name="startDate"
-                  value={formData.startDate}
-                  onChange={handleChange}
-                  style={inputStyle}
-                  min={editingRequest ? undefined : new Date().toISOString().split('T')[0]}
-                />
-                {errors.startDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.startDate}</div>}
-              </div>
-              <div>
-                <label style={labelStyle}>End Date *</label>
-                <input
-                  className="tto-field"
-                  type="date"
-                  name="endDate"
-                  value={formData.endDate}
-                  onChange={handleChange}
-                  disabled={formData.halfDay}
-                  style={{ ...inputStyle, ...(formData.halfDay ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
-                  min={formData.startDate || (editingRequest ? undefined : new Date().toISOString().split('T')[0])}
-                />
-                {errors.endDate && <div style={{ color: COLORS.danger, fontSize: 13.5, marginTop: 8 }}>{errors.endDate}</div>}
-              </div>
-            </div>
-
-            {calculatedDays > 0 && (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: COLORS.goldTint, border: `1px solid ${COLORS.gold500}40`,
-                borderRadius: 12, padding: '12px 16px', marginBottom: 24,
-              }}>
-                <span style={{ fontSize: 13, color: COLORS.ink600, fontWeight: 600 }}>Duration requested</span>
-                <span style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: COLORS.navy900 }}>
-                  {formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`}
-                </span>
-              </div>
-            )}
-
-            {/* Half Day Toggle */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{
-                display: 'flex', alignItems: 'center', cursor: 'pointer',
-                padding: '15px 16px',
-                background: formData.halfDay ? COLORS.goldTint : COLORS.paper,
-                borderRadius: 12,
-                border: `1.5px solid ${formData.halfDay ? COLORS.gold500 : COLORS.line}`,
-                transition: 'all 0.2s ease',
-              }}>
-                <input
-                  type="checkbox"
-                  name="halfDay"
-                  checked={formData.halfDay}
-                  onChange={handleChange}
-                  style={{ marginRight: 12, width: 16, height: 16, cursor: 'pointer', accentColor: COLORS.navy800 }}
-                />
-                <span style={{ fontWeight: 600, color: COLORS.ink900, fontSize: 13.5 }}>
-                  This is a half-day leave request
-                </span>
-              </label>
-            </div>
-
-            {/* Emergency Contact */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Emergency Contact (Optional)</label>
-              <input
-                className="tto-field"
-                type="tel"
-                name="emergencyContact"
-                value={formData.emergencyContact}
-                onChange={handleChange}
-                placeholder="+1 (555) 123-4567"
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Attachments */}
-            <div style={{ marginBottom: 32 }}>
-              <label style={labelStyle}>Supporting Documents (Optional)</label>
-              <div
-                style={{
-                  border: `1.5px dashed ${dropHover ? COLORS.navy700 : COLORS.line}`,
-                  borderRadius: 12,
-                  padding: '28px',
-                  textAlign: 'center',
-                  background: dropHover ? COLORS.paper : COLORS.white,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={() => setDropHover(true)}
-                onMouseLeave={() => setDropHover(false)}
-                onClick={() => document.getElementById('fileInput').click()}
-              >
-                <IconUpload style={{ width: 26, height: 26, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.6, margin: '0 auto 10px' }} />
-                <div style={{ color: COLORS.ink900, fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>
-                  {formData.attachments ? formData.attachments.name : 'Click to upload or drag and drop'}
-                </div>
-                <div style={{ color: COLORS.ink400, fontSize: 13 }}>
-                  PDF, DOC, JPG up to 10MB
-                </div>
-                {editingRequest?.attachment && !formData.attachments && (
-                  <div style={{ color: COLORS.ink600, fontSize: 13, marginTop: 6 }}>
-                    The current attachment is kept unless you upload a new file.
-                  </div>
-                )}
-                <input
-                  id="fileInput"
-                  type="file"
-                  name="attachments"
-                  onChange={handleChange}
-                  style={{ display: 'none' }}
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                />
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                width: '100%',
-                padding: 15,
-                borderRadius: 11,
-                background: submitting ? COLORS.ink400 : COLORS.navy900,
-                color: COLORS.white,
-                border: 'none',
-                fontSize: 14.5,
-                fontWeight: 700,
-                letterSpacing: '0.01em',
-                cursor: submitting ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'background .15s ease, transform .1s ease',
-              }}
-              onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.background = COLORS.navy800; }}
-              onMouseLeave={(e) => { if (!submitting) e.currentTarget.style.background = COLORS.navy900; }}
-            >
-              {submitting ? (
-                <>
-                  <IconSpinner style={{ width: 16, height: 16, stroke: COLORS.gold300, fill: 'none', strokeWidth: 2 }} />
-                  Submitting...
-                </>
-              ) : (
-                editingRequest ? 'Update Leave Request' : 'Submit Leave Request'
-              )}
-            </button>
-          </div>
-        </form>
-
-        {/* Recent Requests */}
-        <div style={cardStyle}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 16, fontWeight: 700, marginBottom: 20, color: COLORS.ink900 }}>
-            <IconList style={{ width: 17, height: 17, stroke: COLORS.navy800, fill: 'none', strokeWidth: 1.8 }} />
-            Recent Leave Requests
-          </h3>
-          {loadingRequests ? (
-            <div style={{ textAlign: 'center', padding: 40, color: COLORS.ink600 }}>
-              <IconSpinner style={{ width: 26, height: 26, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.8, marginBottom: 12 }} />
-              <div style={{ fontSize: 13.5 }}>Loading requests...</div>
-            </div>
-          ) : recentRequests.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: COLORS.ink600 }}>
-              <IconFile style={{ width: 32, height: 32, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.4, marginBottom: 12 }} />
-              <div style={{ fontSize: 13.5 }}>No leave requests yet. Submit your first request above.</div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {recentRequests.map((request) => {
-                const status = statusStyles[(request.status || '').toLowerCase()] || statusStyles.pending;
-                const days = request.numberOfDays ?? request.days ?? 0;
-                const requestId = request._id || request.id;
-                const isPending = request.status === 'Pending';
-                const isEditing = editingRequest && (editingRequest._id || editingRequest.id) === requestId;
-                const lockedTitle = isPending ? undefined : `${request.status} requests can no longer be changed`;
+          <Card title="Type of leave" icon="apply">
+            <div className="leave-types" role="group" aria-label="Type of leave">
+              {leaveTypeOptions.map((opt) => {
+                const active = formData.leaveType === opt.id
                 return (
-                  <div
-                    key={requestId}
-                    className="tto-row"
-                    style={{
-                      padding: 16,
-                      borderRadius: 12,
-                      background: COLORS.paper,
-                      border: `1px solid ${isEditing ? COLORS.gold500 : COLORS.line}`,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 12,
-                      transition: 'transform 0.2s ease',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 700, color: COLORS.ink900, marginBottom: 4, fontSize: 13.5 }}>
-                        {request.leaveType}
-                      </div>
-                      <div style={{ fontSize: 13.5, color: COLORS.ink600 }}>
-                        {new Date(request.startDate).toLocaleDateString()} to {new Date(request.endDate).toLocaleDateString()} ({request.isHalfDay ? '0.5 day, Half day' : `${days} ${days === 1 ? 'day' : 'days'}`})
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{
-                        padding: '5px 13px',
-                        borderRadius: 20,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        background: status.bg,
-                        color: status.color,
-                        textTransform: 'capitalize',
-                      }}>
-                        {request.status}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => startEditing(request)}
-                        disabled={!isPending || deletingId === requestId}
-                        title={lockedTitle}
-                        style={rowButtonStyle(isPending, COLORS.navy800)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(request)}
-                        disabled={!isPending || deletingId === requestId}
-                        title={lockedTitle}
-                        style={rowButtonStyle(isPending, COLORS.danger)}
-                      >
-                        {deletingId === requestId ? 'Deleting...' : 'Delete'}
-                      </button>
-                    </div>
-                  </div>
-                );
+                  <button key={opt.id} type="button" className="leave-type" aria-pressed={active} onClick={() => update('leaveType', opt.id)}>
+                    <span className="leave-type__icon"><Icon name={opt.icon} size={18} /></span>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="leave-type__name">{opt.id} — {opt.name}</span>
+                      <span className="leave-type__hint">{opt.hint}</span>
+                    </span>
+                    {active && <Icon name="checkCircle" size={18} className="leave-type__check" />}
+                  </button>
+                )
               })}
             </div>
-          )}
-        </div>
+            {errors.leaveType && <div className="ui-error" role="alert">{errors.leaveType}</div>}
+          </Card>
+
+          <Card title="Dates" icon="calendar">
+            <div className="ui-grid ui-grid--2" style={{ gap: 16 }}>
+              <div className="ui-field">
+                <label className="ui-label" htmlFor="leave-start">From</label>
+                <input id="leave-start" type="date" name="startDate" value={formData.startDate} onChange={handleChange} min={minDate} aria-invalid={errors.startDate ? 'true' : undefined} />
+                {errors.startDate ? <div className="ui-error">{errors.startDate}</div> : <div className="ui-hint">{weekdayOf(formData.startDate) || 'First day of leave'}</div>}
+              </div>
+              <div className="ui-field">
+                <label className="ui-label" htmlFor="leave-end">To</label>
+                <input id="leave-end" type="date" name="endDate" value={formData.endDate} onChange={handleChange} disabled={formData.halfDay} min={formData.startDate || minDate} aria-invalid={errors.endDate ? 'true' : undefined} />
+                {errors.endDate ? <div className="ui-error">{errors.endDate}</div> : <div className="ui-hint">{formData.halfDay ? 'Same day for a half-day leave' : weekdayOf(formData.endDate) || 'Last day of leave'}</div>}
+              </div>
+            </div>
+            <label className="switch-row">
+              <input type="checkbox" className="switch" name="halfDay" checked={formData.halfDay} onChange={handleChange} />
+              <span>
+                <span style={{ display: 'block', fontWeight: 600, color: 'var(--ink-900)' }}>This is a half-day leave request</span>
+                <span className="ui-hint" style={{ marginTop: 2, display: 'block' }}>Counts as 0.5 day. The end date is set to the start date.</span>
+              </span>
+            </label>
+          </Card>
+
+          <Card title="Reason and document" icon="file">
+            <div className="ui-field">
+              <label className="ui-label" htmlFor="leave-reason">Reason for leave</label>
+              <textarea id="leave-reason" name="reason" rows={4} value={formData.reason} onChange={handleChange} maxLength={MAX_REASON}
+                placeholder="Provide a brief, clear reason for your leave request" aria-invalid={errors.reason ? 'true' : undefined} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                {errors.reason ? <div className="ui-error">{errors.reason}</div> : <div className="ui-hint">Visible to {approverLabel}</div>}
+                <div className="ui-hint num">{formData.reason.length} / {MAX_REASON}</div>
+              </div>
+            </div>
+
+            <div className="ui-field" style={{ marginTop: 18 }}>
+              <label className="ui-label" htmlFor="leave-emergency">Emergency Contact (Optional)</label>
+              <input id="leave-emergency" type="tel" name="emergencyContact" value={formData.emergencyContact} onChange={handleChange} placeholder="+1 (555) 123-4567" />
+            </div>
+
+            <div className="ui-field" style={{ marginTop: 18 }}>
+              <span className="ui-label">Supporting document (optional)</span>
+              {formData.attachments ? (
+                <div className="file-chip">
+                  <Icon name="paperclip" size={17} />
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span className="ui-cell-main" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formData.attachments.name}</span>
+                    <span className="ui-cell-sub">{(formData.attachments.size / 1024 / 1024).toFixed(2)} MB</span>
+                  </span>
+                  <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm ui-btn--icon" onClick={clearFile} aria-label="Remove document"><Icon name="x" size={16} /></button>
+                </div>
+              ) : (
+                <div
+                  className={`dropzone${dragging ? ' is-dragging' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragging(false); pickFile(e.dataTransfer.files?.[0]) }}
+                >
+                  <Icon name="upload" size={22} />
+                  <div style={{ fontWeight: 600, color: 'var(--ink-900)' }}>Drop a file here or <span className="ui-link">browse</span></div>
+                  <div className="ui-hint" style={{ marginTop: 0 }}>PDF, DOC or JPG, up to 10 MB</div>
+                  {editingRequest?.attachment && <div className="ui-hint">The current document is kept unless you choose a new one.</div>}
+                </div>
+              )}
+              <input ref={fileInputRef} id="fileInput" type="file" name="attachments" hidden accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={(e) => pickFile(e.target.files?.[0])} />
+              {errors.attachments && <div className="ui-error">{errors.attachments}</div>}
+            </div>
+          </Card>
+        </form>
+
+        <aside className="ui-stack leave-aside">
+          <Card title="Summary" icon="list">
+            <dl className="summary-list">
+              <div><dt>Leave</dt><dd>{leaveTypeLabels[formData.leaveType] || <span className="muted">Not chosen</span>}</dd></div>
+              <div><dt>Dates</dt><dd>{formData.startDate ? formatRange(formData.startDate, formData.halfDay ? formData.startDate : formData.endDate || formData.startDate) : <span className="muted">Not chosen</span>}</dd></div>
+              <div className="summary-list__total"><dt>Duration requested</dt><dd>{calculatedDays > 0 ? durationLabel : '–'}</dd></div>
+            </dl>
+            <div className="summary-route">
+              <Icon name="mail" size={16} />
+              <span>Goes to <strong>{approverLabel === 'Management' ? 'Management' : 'the Principal'}</strong> for approval</span>
+            </div>
+            {datesValid && (holidaysInRange.length ? (
+              <Notice tone="warning" icon="sun" style={{ marginTop: 12 }}>
+                {holidaysInRange.map((h) => `${h.name} (${formatDate(h.date, { year: false })})`).join(', ')} {holidaysInRange.length === 1 ? 'is a holiday' : 'are holidays'} within these dates.
+              </Notice>
+            ) : (
+              <Notice tone="success" icon="checkCircle" style={{ marginTop: 12 }}>No holidays fall in these dates.</Notice>
+            ))}
+            <button type="submit" form="leave-form" className="ui-btn ui-btn--primary ui-btn--lg ui-btn--block" disabled={submitting} style={{ marginTop: 16 }}>
+              {submitting ? <><Spinner /> Submitting...</> : editingRequest ? 'Update Leave Request' : 'Submit Leave Request'}
+            </button>
+            {editingRequest && (
+              <button type="button" className="ui-btn ui-btn--ghost ui-btn--block" onClick={resetForm} style={{ marginTop: 8 }}>Discard changes</button>
+            )}
+          </Card>
+
+          <Card title="Recent Leave Requests" icon="history" actions={<Link to="/leave-history" className="ui-link" style={{ fontSize: 13.5 }}>View all</Link>} bodyStyle={{ padding: '6px 20px 12px' }}>
+            {loadingRequests ? (
+              <div style={{ padding: '10px 0' }} aria-busy="true">
+                <span className="sr-only">Loading requests...</span>
+                <Skeleton height={52} radius={8} style={{ marginBottom: 8 }} />
+                <Skeleton height={52} radius={8} />
+              </div>
+            ) : recentRequests.length === 0 ? (
+              <p style={{ margin: '12px 0', color: 'var(--ink-500)', fontSize: 14 }}>No leave requests yet. Your requests will be listed here after you submit.</p>
+            ) : (
+              <ul className="recent-list">
+                {recentRequests.map((request) => {
+                  const requestId = request._id || request.id
+                  const isPending = request.status === 'Pending'
+                  const isEditing = editingRequest && (editingRequest._id || editingRequest.id) === requestId
+                  const lockedTitle = isPending ? undefined : `${request.status} requests can no longer be changed`
+                  return (
+                    <li key={requestId} className={`tto-row${isEditing ? ' is-editing' : ''}`}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="ui-cell-main">{request.leaveType}</div>
+                        <div className="ui-cell-sub">{formatRange(request.startDate, request.endDate)} · {formatLeaveDays(request)}</div>
+                      </div>
+                      <StatusChip status={request.status} />
+                      <div className="recent-list__actions">
+                        <button type="button" className="ui-btn ui-btn--secondary ui-btn--sm" onClick={() => startEditing(request)} disabled={!isPending || deletingId === requestId} title={lockedTitle}>
+                          Edit
+                        </button>
+                        <button type="button" className="ui-btn ui-btn--danger ui-btn--sm" onClick={() => handleDelete(request)} disabled={!isPending || deletingId === requestId} title={lockedTitle}>
+                          {deletingId === requestId ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </Card>
+        </aside>
       </div>
 
-      {dialog && (
-        <div
-          onClick={() => { if (!submitting) setDialog(null); }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(10,18,32,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 16,
-          }}
+      {dialog === 'confirm' && (
+        <Dialog
+          title={editingRequest ? 'Submit changes to this leave request?' : 'Submit this leave request?'}
+          description="Please check the details before submitting."
+          icon="apply"
+          tone="gold"
+          onClose={submitting ? undefined : () => setDialog(null)}
+          footer={(
+            <>
+              <button type="button" className="ui-btn ui-btn--secondary" onClick={() => setDialog(null)} disabled={submitting}>Cancel</button>
+              <button type="button" className="ui-btn ui-btn--primary" onClick={confirmSubmit} disabled={submitting} data-autofocus>
+                {submitting ? <><Spinner /> Submitting...</> : 'Submit'}
+              </button>
+            </>
+          )}
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="leave-dialog-title"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 440,
-              maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
-              background: COLORS.white, borderRadius: 16,
-              boxShadow: '0 24px 60px rgba(10,18,32,0.35)',
-              padding: 26, boxSizing: 'border-box',
-              animation: 'fadeIn 0.2s ease-out',
-            }}
-          >
-            {dialog === 'success' ? (
-              <div style={{ textAlign: 'center' }}>
-                <IconCheck style={{ width: 46, height: 46, stroke: COLORS.success, fill: 'none', strokeWidth: 1.6, marginBottom: 12 }} />
-                <h3 id="leave-dialog-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: COLORS.ink900, margin: '0 0 8px' }}>
-                  {successMessage === UPDATE_SUCCESS_MESSAGE ? 'Request Updated' : 'Request Submitted'}
-                </h3>
-                <p style={{ fontSize: 14.5, color: COLORS.ink600, margin: '0 0 22px' }}>{successMessage}</p>
-                <button type="button" autoFocus onClick={() => setDialog(null)} style={{ ...dialogButtonStyle(true), width: '100%' }}>
-                  OK
-                </button>
-              </div>
-            ) : (
-              <>
-                <h3 id="leave-dialog-title" style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600, color: COLORS.ink900, margin: '0 0 6px' }}>
-                  {editingRequest ? 'Submit changes to this leave request?' : 'Submit this leave request?'}
-                </h3>
-                <p style={{ fontSize: 13.5, color: COLORS.ink600, margin: '0 0 18px' }}>
-                  Please check the details before submitting.
-                </p>
-                <div style={{ display: 'grid', gap: 10, background: COLORS.paper, border: `1px solid ${COLORS.line}`, borderRadius: 12, padding: 16, marginBottom: 22, fontSize: 13.5 }}>
-                  {[
-                    ['Leave type', leaveTypeLabels[formData.leaveType] || formData.leaveType],
-                    ['From', formatDate(formData.startDate)],
-                    ['To', formatDate(formData.halfDay ? formData.startDate : formData.endDate)],
-                    ['Duration', formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`],
-                    ['Reason', formData.reason],
-                    ...(formData.attachments ? [['Attachment', formData.attachments.name]] : []),
-                  ].map(([label, value]) => (
-                    <div key={label} style={{ display: 'flex', gap: 12 }}>
-                      <span style={{ width: 92, flexShrink: 0, color: COLORS.ink400, fontWeight: 600 }}>{label}</span>
-                      <span style={{ color: COLORS.ink900, fontWeight: 600, overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="button" onClick={() => setDialog(null)} disabled={submitting} style={dialogButtonStyle(false)}>
-                    Cancel
-                  </button>
-                  <button type="button" autoFocus onClick={confirmSubmit} disabled={submitting} style={dialogButtonStyle(true)}>
-                    {submitting ? (
-                      <>
-                        <IconSpinner style={{ width: 16, height: 16, stroke: COLORS.gold300, fill: 'none', strokeWidth: 2 }} />
-                        Submitting...
-                      </>
-                    ) : 'Submit'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+          <dl className="ui-dl confirm-summary">
+            <dt>Leave type</dt><dd>{leaveTypeLabels[formData.leaveType] || formData.leaveType}</dd>
+            <dt>From</dt><dd>{formatDate(formData.startDate, { weekday: true })}</dd>
+            <dt>To</dt><dd>{formatDate(formData.halfDay ? formData.startDate : formData.endDate, { weekday: true })}</dd>
+            <dt>Duration</dt><dd>{durationLabel}</dd>
+            <dt>Reason</dt><dd style={{ whiteSpace: 'pre-line' }}>{formData.reason}</dd>
+            {formData.attachments && <><dt>Document</dt><dd>{formData.attachments.name}</dd></>}
+          </dl>
+        </Dialog>
+      )}
+
+      {dialog === 'success' && (
+        <Dialog
+          title={successMessage === UPDATE_SUCCESS_MESSAGE ? 'Request updated' : 'Request submitted'}
+          description={successMessage}
+          icon="checkCircle"
+          tone="success"
+          onClose={() => setDialog(null)}
+          footer={(
+            <>
+              <Link to="/leave-history" className="ui-btn ui-btn--secondary">View my leaves</Link>
+              <button type="button" className="ui-btn ui-btn--primary" onClick={() => setDialog(null)} data-autofocus>OK</button>
+            </>
+          )}
+        />
       )}
     </div>
-  );
+  )
 }

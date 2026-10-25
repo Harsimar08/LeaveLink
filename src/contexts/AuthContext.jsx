@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react'
 import { fetchCurrentUser, getToken, saveToken, clearToken, refreshSessionToken, AUTH_EXPIRED_EVENT } from '../utils/api-auth'
+import { resetLeaves } from '../utils/leavesStore'
 
 const AuthContext = createContext(null)
 
@@ -31,35 +32,15 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState(getToken())
   
-  // Aggressive cleanup function
-  const cleanupOldLocalStorage = () => {
-    const keysToRemove = ['currentUser', 'profileUser']
-    let cleaned = false
-    
-    keysToRemove.forEach(key => {
-      if (localStorage.getItem(key)) {
-        localStorage.removeItem(key)
-        cleaned = true
-        console.log(`🧹 Removed old ${key} from localStorage`)
-      }
-    })
-    
-    return cleaned
-  }
-  
-  // Clean up old localStorage keys on mount and set up periodic cleanup
+  // Older versions cached user records in localStorage; drop them once on start-up
   useEffect(() => {
-    // Initial cleanup
-    cleanupOldLocalStorage()
-    
-    // Set up periodic cleanup every 2 seconds to catch any rogue writes
-    const intervalId = setInterval(() => {
-      cleanupOldLocalStorage()
-    }, 2000)
-    
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId)
+    ['currentUser', 'profileUser'].forEach((key) => localStorage.removeItem(key))
   }, [])
+
+  const userId = user?.id
+  useEffect(() => {
+    resetLeaves()
+  }, [userId])
 
   // The server rejected this tab's token (expired, or no longer matches its user)
   useEffect(() => {
@@ -86,7 +67,6 @@ export const AuthProvider = ({ children }) => {
         if (cancelled) return
         if (userData) {
           setUser(userData)
-          console.log('✅ User loaded  :', userData.name || userData.fullName)
         } else {
           // Token was rejected by the server
           setToken(null)

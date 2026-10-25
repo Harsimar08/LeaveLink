@@ -1,8 +1,6 @@
 // API Configuration - Use environment variable, or fallback to relative '/api' in production (Vercel) / localhost in dev
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api')
 
-console.log('🔧 API URL:', API_URL) // Debug log to verify correct URL
-
 const TOKEN_KEY = 'token'
 export const AUTH_EXPIRED_EVENT = 'leavelink:auth-expired'
 

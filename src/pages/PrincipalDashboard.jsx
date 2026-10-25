@@ -1,83 +1,52 @@
-import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { getLeaveRequests, getAllUsers, approveLeave, rejectLeave } from '../utils/api-auth'
+import { getAllUsers } from '../utils/api-auth'
+import { useLeaves } from '../utils/leavesStore'
+import { useHolidays } from '../utils/holidays'
+import useLeaveDecision from '../utils/useLeaveDecision'
 import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatRole } from '../utils/roles'
+import { formatDate, formatRange, parseDay, toISODate } from '../utils/dates'
+import MonthCalendar from '../components/MonthCalendar'
+import { Avatar, Card, EmptyState, Icon, Kpi, PageHeader, StatusChip } from '../components/ui'
 
 const APPROVAL_ROLES = ['chief_coordinator', 'coordinator', 'faculty']
 
-// ===== JIMS Corporate Theme Tokens (shared with Dashboard.jsx) =====
-const C = {
-  navy950: '#0B1D30',
-  navy900: '#122B45',
-  navy800: '#1B3A5C',
-  navy700: '#274A70',
-  gold600: '#B08A2E',
-  gold500: '#C9A227',
-  gold100: '#F3E9D2',
-  paper:   '#F4F5F7',
-  card:    '#FFFFFF',
-  line:    '#E3E6EA',
-  ink900:  '#182230',
-  ink600:  '#4B5768',
-  ink400:  '#7C8797',
-  green700:'#256B4C',
-  green100:'#E4F2EA',
-  red700:  '#A73A3A',
-  red100:  '#F7E7E6',
-  amber700:'#9A5B0F',
-  amber100:'#FBEBD3'
+const ownerId = (leave) => leave.user?.id || leave.userId
+const covers = (leave, date) => {
+  const start = parseDay(leave.startDate)
+  const end = parseDay(leave.endDate) || start
+  const day = parseDay(date)
+  return !!start && day >= start && day <= end
 }
-const serif = { fontFamily: "'Source Serif 4', Georgia, serif" }
-const shadowSoft = '0 1px 2px rgba(15,29,48,.04), 0 10px 28px rgba(15,29,48,.07)'
 
-// KPI card tokens replacing the previous bright gradients — still four distinct
-// accents so the cards remain visually distinguishable, just corporate/muted.
-const kpiCards = [
-  { accent: C.navy900, tint: '#EDF1F5' },
-  { accent: C.red700,  tint: C.red100  },
-  { accent: C.gold600, tint: C.gold100 },
-  { accent: C.green700,tint: C.green100 }
-]
-
-export default function PrincipalDashboard(){
-  const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuth()
-  const [leaves, setLeaves] = useState([])
+export default function PrincipalDashboard() {
+  const { user } = useAuth()
+  const { leaves } = useLeaves()
+  const { holidays } = useHolidays()
+  const { approve, reject, busyId } = useLeaveDecision()
   const [users, setUsers] = useState([])
-  const [processingId, setProcessingId] = useState(null)
-
-  const loadData = React.useCallback(async () => {
-    const [leavesResult, usersResult] = await Promise.allSettled([getLeaveRequests(), getAllUsers()])
-    if (leavesResult.status === 'fulfilled') setLeaves(leavesResult.value || [])
-    if (usersResult.status === 'fulfilled') setUsers(usersResult.value || [])
-  }, [])
+  const today = parseDay(new Date())
+  const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
+  const [selectedDay, setSelectedDay] = useState(toISODate(today))
 
   useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'principal') return
-    loadData()
-    const interval = setInterval(loadData, 15000)
-    return () => clearInterval(interval)
-  }, [isAuthenticated, user?.role, loadData])
+    let alive = true
+    const load = () => getAllUsers().then((list) => { if (alive) setUsers(list || []) }).catch(() => {})
+    load()
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') load() }, 60000)
+    return () => { alive = false; clearInterval(interval) }
+  }, [])
 
-  const today = new Date()
-  const normalizeDate = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const parseDate = (value) => value ? new Date(value.length === 10 ? `${value}T00:00:00` : value) : null
-  const coversDate = (leave, date) => {
-    const start = parseDate(leave.startDate)
-    const end = parseDate(leave.endDate) || start
-    if (!start) return false
-    const target = normalizeDate(date)
-    return target >= normalizeDate(start) && target <= normalizeDate(end)
-  }
   const isThisMonth = (value) => {
-    const date = parseDate(value)
+    const date = parseDay(value)
     return !!date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth()
   }
 
   const facultyUsers = users.filter((u) => u.isActive !== false && APPROVAL_ROLES.includes(u.role))
   const approvedLeaves = leaves.filter((l) => l.status === 'Approved' && APPROVAL_ROLES.includes(l.user?.role))
-  const absentIdsOn = (date) => new Set(approvedLeaves.filter((l) => coversDate(l, date)).map((l) => l.user?.id || l.userId))
+  const absentIdsOn = (date) => new Set(approvedLeaves.filter((l) => covers(l, date)).map(ownerId))
   const pendingApprovals = leaves
     .filter((l) => l.status === 'Pending' && l.user?.id !== user?.id && APPROVAL_ROLES.includes(l.user?.role))
     .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
@@ -88,7 +57,7 @@ export default function PrincipalDashboard(){
     onLeaveToday: absentIdsOn(today).size,
     pendingApprovals: pendingApprovals.length,
     approvedThisMonth: leaves.filter((l) => l.status === 'Approved' && isThisMonth(l.actionDate)).length,
-    rejectedThisMonth: leaves.filter((l) => l.status === 'Rejected' && isThisMonth(l.actionDate)).length
+    rejectedThisMonth: leaves.filter((l) => l.status === 'Rejected' && isThisMonth(l.actionDate)).length,
   }
 
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -104,17 +73,17 @@ export default function PrincipalDashboard(){
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dept, members]) => {
       const ids = new Set(members.map((m) => m.id))
-      const deptLeaves = approvedLeaves.filter((l) => ids.has(l.user?.id || l.userId))
+      const deptLeaves = approvedLeaves.filter((l) => ids.has(ownerId(l)))
       const daysThisYear = deptLeaves
-        .filter((l) => parseDate(l.startDate)?.getFullYear() === today.getFullYear())
+        .filter((l) => parseDay(l.startDate)?.getFullYear() === today.getFullYear())
         .reduce((sum, l) => sum + (Number(l.numberOfDays) || 0), 0)
       const onLeaveThisMonth = new Set(deptLeaves
         .filter((l) => {
-          const start = parseDate(l.startDate)
-          const end = parseDate(l.endDate) || start
+          const start = parseDay(l.startDate)
+          const end = parseDay(l.endDate) || start
           return start && start <= monthEnd && end >= monthStart
         })
-        .map((l) => l.user?.id || l.userId))
+        .map(ownerId))
       const coordinator = members.find((m) => m.role === 'coordinator') || members.find((m) => m.role === 'chief_coordinator')
       return {
         dept,
@@ -122,465 +91,205 @@ export default function PrincipalDashboard(){
         count: members.length,
         onLeave: members.filter((m) => absentToday.has(m.id)).length,
         avg: (daysThisYear / members.length).toFixed(1),
-        util: Math.round((onLeaveThisMonth.size / members.length) * 100)
+        util: Math.round((onLeaveThisMonth.size / members.length) * 100),
       }
     })
 
-  const [hoveredDate, setHoveredDate] = useState(null)
-  const TOOLTIP_WIDTH = 200
-  const TOOLTIP_HEIGHT = 110
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getDay()
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
-  const calendarDays = Array.from({ length: firstDayOfMonth + daysInMonth }, (_, index) => {
-    return index < firstDayOfMonth ? null : index - firstDayOfMonth + 1
-  })
-
-  const attendanceData = Array.from({ length: daysInMonth }, (_, idx) => {
-    const day = idx + 1
-    const date = new Date(today.getFullYear(), today.getMonth(), day)
-    const totalTeachers = facultyUsers.length
-    const absentTeachers = absentIdsOn(date).size
+  const holidayByDate = useMemo(() => Object.fromEntries(holidays.map((h) => [h.date, h.name])), [holidays])
+  const totalTeachers = facultyUsers.length
+  const getDayInfo = (date) => {
+    const absent = absentIdsOn(date).size
+    const ratio = totalTeachers ? absent / totalTeachers : 0
     return {
-      day,
-      date,
-      presentTeachers: Math.max(totalTeachers - absentTeachers, 0),
-      absentTeachers,
-      totalTeachers
-    }
-  })
-
-  const monthLabel = today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-  const formatCalendarDate = (date) => date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
-  const formatShortDate = (value) => {
-    const date = parseDate(value)
-    return date ? date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
-  }
-  const formatDuration = (leave) => {
-    const range = !leave.endDate || leave.startDate === leave.endDate
-      ? formatShortDate(leave.startDate)
-      : `${formatShortDate(leave.startDate)} - ${formatShortDate(leave.endDate)}`
-    return `${range} (${formatLeaveDays(leave)})`
-  }
-
-  const handleApprove = async (id) => {
-    if (!window.confirm('Approve this leave request?')) return
-    try {
-      setProcessingId(id)
-      await approveLeave(id)
-      await loadData()
-    } catch (err) {
-      alert('Approve failed: ' + (err.message || 'Unknown error'))
-    } finally {
-      setProcessingId(null)
+      absent,
+      present: Math.max(totalTeachers - absent, 0),
+      holiday: holidayByDate[toISODate(date)],
+      level: absent ? (totalTeachers ? (ratio > 0.15 ? 3 : ratio > 0.05 ? 2 : 1) : Math.min(absent, 3)) : 0,
+      ariaLabel: `${absent} absent${holidayByDate[toISODate(date)] ? `, ${holidayByDate[toISODate(date)]}` : ''}`,
     }
   }
 
-  const handleReject = async (id) => {
-    const reason = window.prompt('Please provide a rejection reason (optional):', '')
-    if (reason === null) return
-    try {
-      setProcessingId(id)
-      await rejectLeave(id, reason || '')
-      await loadData()
-    } catch (err) {
-      alert('Reject failed: ' + (err.message || 'Unknown error'))
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  React.useEffect(() => {
-    if (!isAuthenticated || user?.role !== 'principal') {
-      navigate('/login')
-      return
-    }
-  }, [navigate, isAuthenticated, user])
+  const awayOnSelected = approvedLeaves.filter((l) => covers(l, selectedDay))
+  const pendingOnSelected = leaves.filter((l) => l.status === 'Pending' && APPROVAL_ROLES.includes(l.user?.role) && covers(l, selectedDay))
+  const firstName = (user?.name || user?.fullName || 'User').split(' ')[0]
+  const onLeavePct = institutionStats.totalFaculty ? ((institutionStats.onLeaveToday / institutionStats.totalFaculty) * 100).toFixed(1) : '0.0'
 
   if (!user) return null
 
-  // Get user's first name - handle both fullName and name fields
-  const userName = user.name || user.fullName || 'User'
-  const firstName = userName.split(' ')[0]
-
   return (
-    <div className="dashboard-layout" style={{ background: C.paper, minHeight: '100vh', padding: '32px', fontFamily: "'Inter', sans-serif", color: C.ink900 }}>
-      {/* Welcome Header */}
-      <div className="page-title" style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{
-            width: 26,
-            height: 26,
-            borderRadius: 7,
-            background: '#FFFFFF',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 3,
-            boxShadow: `0 0 0 2px ${C.gold100}, 0 2px 6px rgba(11,29,48,0.15)`,
-            flexShrink: 0,
-            fontSize: 12.5,
-            fontWeight: 700,
-            color: C.navy950
-          }}>
-            JIMS
-          </div>
-          <span style={{
-            fontSize: 12.5,
-            fontWeight: 700,
-            letterSpacing: '.14em',
-            textTransform: 'uppercase',
-            color: C.gold600
-          }}>
-            Jagan Institute of Management Studies
-          </span>
-        </div>
-        <div>
-          <h2 style={{ ...serif, margin: 0, fontSize: '32px', fontWeight: 700, color: C.navy950 }}>Welcome, {firstName}</h2>
-          <div style={{ color: C.ink600, fontSize: '15px', marginTop: 6 }}>Principal Dashboard — Institution Overview</div>
-        </div>
+    <div className="ui-page">
+      <PageHeader
+        eyebrow="Jagan Institute of Management Studies"
+        title={`Welcome, ${firstName}`}
+        subtitle="Principal Dashboard — Institution Overview"
+        actions={(
+          <>
+            <Link to="/leave-request" className="ui-btn ui-btn--secondary"><Icon name="apply" size={17} />Apply for my leave</Link>
+            <Link to="/approvals" className="ui-btn ui-btn--primary"><Icon name="approvals" size={17} />
+              {institutionStats.pendingApprovals ? `Review ${institutionStats.pendingApprovals} request${institutionStats.pendingApprovals === 1 ? '' : 's'}` : 'Open approvals'}
+            </Link>
+          </>
+        )}
+      />
+
+      <div className="ui-grid ui-grid--kpi principal-kpi-grid" style={{ marginBottom: 20 }}>
+        <Kpi label="Total Faculty" value={institutionStats.totalFaculty} icon="users" hint={`Across ${institutionStats.totalDepartments} departments`} />
+        <Kpi label="On Leave Today" value={<span style={{ color: 'var(--danger)' }}>{institutionStats.onLeaveToday}</span>} icon="alert" tone="danger" hint={`${onLeavePct}% of total faculty`} />
+        <Kpi label="Pending Approvals" value={<span style={{ color: 'var(--gold-700)' }}>{institutionStats.pendingApprovals}</span>} icon="clock" tone="warning" hint="Requires your attention" />
+        <Kpi label="Approved This Month" value={<span style={{ color: 'var(--success)' }}>{institutionStats.approvedThisMonth}</span>} icon="checkCircle" tone="success" hint={`${institutionStats.rejectedThisMonth} rejected`} />
       </div>
 
-      {/* Key Metrics Grid */}
-      <style>{`
-        .principal-kpi-grid > div { min-width: 0; padding: 22px 20px !important; }
-        @media (max-width: 640px) {
-          .principal-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
-          .principal-kpi-grid > div { padding: 16px 14px !important; }
-        }
-      `}</style>
-      <div className="principal-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '20px', marginBottom: 32 }}>
-        <div style={{
-          background: C.card,
-          padding: '26px',
-          borderRadius: '16px',
-          border: `1px solid ${C.line}`,
-          borderTop: `3px solid ${kpiCards[0].accent}`,
-          boxShadow: shadowSoft
-        }}>
-          <div style={{ fontSize: '13px', color: C.ink400, marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Total Faculty</div>
-          <div style={{ ...serif, fontSize: '38px', fontWeight: 700, marginBottom: '4px', color: C.navy950 }}>{institutionStats.totalFaculty}</div>
-          <div style={{ fontSize: '13px', color: C.ink600 }}>Across {institutionStats.totalDepartments} departments</div>
-        </div>
-
-        <div style={{
-          background: C.card,
-          padding: '26px',
-          borderRadius: '16px',
-          border: `1px solid ${C.line}`,
-          borderTop: `3px solid ${kpiCards[1].accent}`,
-          boxShadow: shadowSoft
-        }}>
-          <div style={{ fontSize: '13px', color: C.ink400, marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>On Leave Today</div>
-          <div style={{ ...serif, fontSize: '38px', fontWeight: 700, marginBottom: '4px', color: C.red700 }}>{institutionStats.onLeaveToday}</div>
-          <div style={{ fontSize: '13px', color: C.ink600 }}>{institutionStats.totalFaculty ? ((institutionStats.onLeaveToday/institutionStats.totalFaculty)*100).toFixed(1) : '0.0'}% of total faculty</div>
-        </div>
-
-        <div style={{
-          background: C.card,
-          padding: '26px',
-          borderRadius: '16px',
-          border: `1px solid ${C.line}`,
-          borderTop: `3px solid ${kpiCards[2].accent}`,
-          boxShadow: shadowSoft
-        }}>
-          <div style={{ fontSize: '13px', color: C.ink400, marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Pending Approvals</div>
-          <div style={{ ...serif, fontSize: '38px', fontWeight: 700, marginBottom: '4px', color: C.gold600 }}>{institutionStats.pendingApprovals}</div>
-          <div style={{ fontSize: '13px', color: C.ink600 }}>Requires your attention</div>
-        </div>
-
-        <div style={{
-          background: C.card,
-          padding: '26px',
-          borderRadius: '16px',
-          border: `1px solid ${C.line}`,
-          borderTop: `3px solid ${kpiCards[3].accent}`,
-          boxShadow: shadowSoft
-        }}>
-          <div style={{ fontSize: '13px', color: C.ink400, marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Approved This Month</div>
-          <div style={{ ...serif, fontSize: '38px', fontWeight: 700, marginBottom: '4px', color: C.green700 }}>{institutionStats.approvedThisMonth}</div>
-          <div style={{ fontSize: '13px', color: C.ink600 }}>{institutionStats.rejectedThisMonth} rejected</div>
-        </div>
-      </div>
-
-      {/* Attendance Calendar */}
-      <div style={{ width: '100%', maxWidth: 420, background: C.card, borderRadius: '16px', padding: '22px 20px 20px', marginBottom: 32, border: `1px solid ${C.line}`, boxShadow: shadowSoft }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h3 style={{ ...serif, margin: 0, fontSize: 19, fontWeight: 700, color: C.navy950 }}>Attendance Calendar</h3>
-            <p style={{ margin: '8px 0 0', color: C.ink400, fontSize: 13.5 }}>Hover over any date to view attendance details.</p>
-          </div>
-          <span style={{ padding: '6px 14px', borderRadius: 8, background: C.navy950, color: '#fff', fontSize: 13, fontWeight: 700 }}>{monthLabel}</span>
-        </div>
-
-        <div style={{ position: 'relative' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 8, marginBottom: 10 }}>
-            {dayNames.map((day) => (
-              <div key={day} style={{ fontSize: 12, fontWeight: 700, textAlign: 'center', color: C.ink400, letterSpacing: '.06em', textTransform: 'uppercase' }}>{day}</div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,minmax(0,1fr))', gap: 8 }}>
-            {calendarDays.map((day, index) => {
-              const dayInfo = day ? attendanceData[day - 1] : null
-              const isToday = day === today.getDate()
-              const showTooltip = (cell) => {
-                const containerWidth = cell.offsetParent ? cell.offsetParent.clientWidth : 0
-                const centerX = cell.offsetLeft + cell.offsetWidth / 2
-                const below = cell.offsetTop < TOOLTIP_HEIGHT
-                setHoveredDate({
-                  ...dayInfo,
-                  left: Math.max(0, Math.min(centerX - TOOLTIP_WIDTH / 2, containerWidth - TOOLTIP_WIDTH)),
-                  top: below ? cell.offsetTop + cell.offsetHeight + 8 : cell.offsetTop - 8,
-                  below
-                })
-              }
-              return (
-                <div
-                  key={index}
-                  onMouseEnter={(e) => dayInfo && showTooltip(e.currentTarget)}
-                  onMouseLeave={() => setHoveredDate(null)}
-                  onClick={(e) => {
-                    if (!dayInfo) return
-                    if (hoveredDate?.day === day) setHoveredDate(null)
-                    else showTooltip(e.currentTarget)
-                  }}
-                  style={{
-                    minHeight: 40,
-                    borderRadius: 9,
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    color: day ? (isToday ? '#fff' : C.navy950) : 'transparent',
-                    background: day ? (isToday ? C.navy950 : C.paper) : 'transparent',
-                    border: day ? (isToday ? `3px solid ${C.gold500}` : `1px solid ${C.line}`) : 'none',
-                    boxShadow: day ? (isToday ? `0 0 0 3px ${C.gold100}` : 'none') : 'none',
-                    transition: 'transform 0.15s ease, background 0.15s ease',
-                    cursor: day ? 'pointer' : 'default',
-                    position: 'relative'
-                  }}
-                >
-                  {day || ''}
-                </div>
-              )
-            })}
-          </div>
-
-          {hoveredDate && (
-            <div role="tooltip" style={{
-              position: 'absolute',
-              left: hoveredDate.left,
-              top: hoveredDate.top,
-              transform: hoveredDate.below ? 'none' : 'translateY(-100%)',
-              width: TOOLTIP_WIDTH,
-              boxSizing: 'border-box',
-              pointerEvents: 'none',
-              background: C.navy950,
-              borderRadius: 12,
-              padding: '12px 14px',
-              boxShadow: '0 18px 40px rgba(11,29,48,0.28)',
-              color: '#F4F5F7',
-              zIndex: 10
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.gold500, marginBottom: 8 }}>{formatCalendarDate(hoveredDate.date)}</div>
-              <div style={{ fontSize: 13, color: '#E2E8F0', lineHeight: 1.65 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Present Teachers</span><strong>{hoveredDate.presentTeachers}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Absent Teachers</span><strong>{hoveredDate.absentTeachers}</strong></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total Teachers</span><strong>{hoveredDate.totalTeachers}</strong></div>
+      <div className="ui-grid principal-cal-row" style={{ marginBottom: 20 }}>
+        <Card title="Attendance Calendar" icon="calendar" subtitle="Hover over any date to view attendance details. Click a date to see who is away.">
+          <MonthCalendar
+            month={month}
+            onMonthChange={setMonth}
+            getDayInfo={getDayInfo}
+            selectedDay={selectedDay}
+            onSelectDay={(date) => setSelectedDay(toISODate(date))}
+            label="Attendance calendar"
+            renderTooltip={(date, info) => (
+              <div>
+                {info.holiday && <div style={{ color: 'var(--gold-300)' }}>{info.holiday}</div>}
+                <div className="cal__tip-row"><span>Present Teachers</span><strong>{info.present}</strong></div>
+                <div className="cal__tip-row"><span>Absent Teachers</span><strong>{info.absent}</strong></div>
+                <div className="cal__tip-row"><span>Total Teachers</span><strong>{totalTeachers}</strong></div>
               </div>
-            </div>
+            )}
+          />
+          <div className="cal-legend">
+            <span><i style={{ background: 'rgba(180, 69, 44, 0.08)' }} />Few away</span>
+            <span><i style={{ background: 'rgba(180, 69, 44, 0.18)' }} />Several</span>
+            <span><i style={{ background: 'rgba(180, 69, 44, 0.32)' }} />Many away</span>
+            <span><i style={{ background: 'var(--gold-100)' }} />Holiday</span>
+            <span><i style={{ border: '2px solid var(--navy-800)' }} />Today</span>
+          </div>
+        </Card>
+
+        <Card
+          title="Who is away"
+          icon="users"
+          subtitle={`${formatDate(selectedDay, { weekday: true })}${holidayByDate[selectedDay] ? ` · ${holidayByDate[selectedDay]}` : ''}`}
+          actions={<span className="ui-badge">{awayOnSelected.length}</span>}
+        >
+          {awayOnSelected.length === 0 ? (
+            <EmptyState icon="checkCircle" title="Nobody is on approved leave">
+              {pendingOnSelected.length ? `${pendingOnSelected.length} request${pendingOnSelected.length === 1 ? ' is' : 's are'} still waiting for your decision for this day.` : 'All faculty are expected in on this day.'}
+            </EmptyState>
+          ) : (
+            <ul className="away-list">
+              {awayOnSelected.map((l) => (
+                <li key={l.id}>
+                  <Avatar name={l.user?.name} size={34} />
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    <span className="ui-cell-main" style={{ display: 'block' }}>{l.user?.name || 'Unknown'}</span>
+                    <span className="ui-cell-sub">{[l.user?.department, l.leaveType, formatRange(l.startDate, l.endDate)].filter(Boolean).join(' · ')}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
+          {awayOnSelected.length > 0 && pendingOnSelected.length > 0 && (
+            <p className="ui-hint" style={{ marginTop: 12 }}>{pendingOnSelected.length} more request{pendingOnSelected.length === 1 ? '' : 's'} for this day {pendingOnSelected.length === 1 ? 'is' : 'are'} waiting for your decision.</p>
+          )}
+        </Card>
       </div>
 
-      {/* Department Performance */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ background: C.card, borderRadius: '16px', border: `1px solid ${C.line}`, boxShadow: shadowSoft, padding: '32px' }}>
-          <h3 style={{ ...serif, fontSize: 23, fontWeight: 700, marginBottom: 22, color: C.navy950 }}>Department Performance & Leave Analytics</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Coordinator</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Count</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>On Leave</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Avg. Leave Days</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Utilization</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Status</th>
+      <Card title="Department Performance & Leave Analytics" icon="building" noBody style={{ marginBottom: 20 }}>
+        <div className="ui-table-wrap">
+          <table className="ui-table">
+            <thead>
+              <tr>
+                <th>Department</th>
+                <th>Coordinator</th>
+                <th>Faculty Count</th>
+                <th>On Leave</th>
+                <th>Avg. Leave Days</th>
+                <th>Utilization</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departmentStats.length === 0 && (
+                <tr><td colSpan={7}><EmptyState icon="building" title="No department data yet">Departments appear once faculty accounts are added.</EmptyState></td></tr>
+              )}
+              {departmentStats.map((dept) => (
+                <tr key={dept.dept}>
+                  <td className="ui-cell-main">{dept.dept}</td>
+                  <td>{dept.coord}</td>
+                  <td className="num">{dept.count}</td>
+                  <td><span className={`ui-chip ui-chip--plain ${dept.onLeave > 2 ? 'ui-chip--rejected' : 'ui-chip--approved'}`}>{dept.onLeave}</span></td>
+                  <td className="num">{dept.avg} days</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="util-bar"><span style={{ width: `${Math.min(dept.util, 100)}%`, background: dept.util > 90 ? 'var(--danger)' : dept.util > 75 ? 'var(--gold-600)' : 'var(--success)' }} /></div>
+                      <span className="num">{dept.util}%</span>
+                    </div>
+                  </td>
+                  <td><span className={`ui-chip ${dept.util > 90 ? 'ui-chip--rejected' : 'ui-chip--approved'}`}>{dept.util > 90 ? 'High' : 'Normal'}</span></td>
                 </tr>
-              </thead>
-              <tbody>
-                {departmentStats.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ padding: '24px 14px', textAlign: 'center', color: C.ink400, fontSize: '14px' }}>No department data yet</td>
-                  </tr>
-                )}
-                {departmentStats.map((dept, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${C.line}`, transition: 'background 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = C.paper}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <td style={{ padding: '18px 14px', fontWeight: 600, color: C.navy950, fontSize: '15px' }}>{dept.dept}</td>
-                    <td style={{ padding: '18px 14px', color: C.ink600, fontSize: '14px' }}>{dept.coord}</td>
-                    <td style={{ padding: '18px 14px', fontSize: '14px', color: C.ink900 }}>{dept.count}</td>
-                    <td style={{ padding: '18px 14px' }}>
-                      <span style={{
-                        padding: '4px 10px',
-                        borderRadius: '999px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        background: dept.onLeave > 2 ? C.red100 : C.green100,
-                        color: dept.onLeave > 2 ? C.red700 : C.green700
-                      }}>{dept.onLeave}</span>
-                    </td>
-                    <td style={{ padding: '18px 14px', fontWeight: 600, fontSize: '14px', color: C.ink900 }}>{dept.avg} days</td>
-                    <td style={{ padding: '18px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ 
-                          flex: 1, 
-                          height: '8px', 
-                          background: C.line, 
-                          borderRadius: '4px', 
-                          overflow: 'hidden',
-                          maxWidth: '100px'
-                        }}>
-                          <div style={{ 
-                            height: '100%', 
-                            width: `${dept.util}%`,
-                            background: dept.util > 90 ? C.red700 : dept.util > 75 ? C.gold600 : C.green700,
-                            transition: 'width 0.3s'
-                          }}></div>
-                        </div>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: C.ink600 }}>{dept.util}%</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '18px 14px' }}>
-                      <span style={{
-                        padding: '5px 12px',
-                        borderRadius: '999px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        background: dept.util > 90 ? C.red100 : C.green100,
-                        color: dept.util > 90 ? C.red700 : C.green700
-                      }}>{dept.util > 90 ? 'High' : 'Normal'}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </Card>
 
-      {/* High Priority Approvals */}
-      <div>
-        <div style={{ background: C.card, borderRadius: '16px', border: `1px solid ${C.line}`, boxShadow: shadowSoft, padding: '32px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-            <h3 style={{ ...serif, fontSize: 23, margin: 0, color: C.navy950, fontWeight: 700 }}>High Priority Approvals</h3>
-            <span style={{
-              padding: '6px 14px',
-              background: C.gold100,
-              color: C.gold600,
-              borderRadius: '999px',
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '.04em',
-              textTransform: 'uppercase'
-            }}>
-              {institutionStats.pendingApprovals} Pending
-            </span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Faculty Name</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Department</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Leave Type</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Duration</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Reason</th>
-                  <th style={{ padding: '14px', textAlign: 'left', borderBottom: `1px solid ${C.line}`, background: C.paper, fontWeight: 700, fontSize: '13px', color: C.navy950, letterSpacing: '.03em', textTransform: 'uppercase' }}>Actions</th>
+      <Card
+        title="High Priority Approvals"
+        icon="approvals"
+        noBody
+        actions={(
+          <>
+            <span className="ui-chip ui-chip--gold ui-chip--plain">{institutionStats.pendingApprovals} Pending</span>
+            <Link to="/approvals" className="ui-link" style={{ fontSize: 13.5 }}>Open approvals</Link>
+          </>
+        )}
+      >
+        <div className="ui-table-wrap">
+          <table className="ui-table">
+            <thead>
+              <tr>
+                <th>Faculty Name</th>
+                <th>Department</th>
+                <th>Leave Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingApprovals.length === 0 ? (
+                <tr><td colSpan={6}><EmptyState icon="checkCircle" title="No pending approvals">New requests will appear here automatically.</EmptyState></td></tr>
+              ) : pendingApprovals.map((req) => (
+                <tr key={req.id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Avatar name={req.user?.name} size={34} />
+                      <div>
+                        <div className="ui-cell-main">{req.user?.name || 'Unknown'}</div>
+                        <div className="ui-cell-sub">{formatRole(req.user?.role)}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{req.user?.department || '-'}</td>
+                  <td><span className="ui-chip ui-chip--gold ui-chip--plain">{req.leaveType}</span></td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatRange(req.startDate, req.endDate)} ({formatLeaveDays(req)})</td>
+                  <td style={{ maxWidth: 280 }}>
+                    <div style={{ overflowWrap: 'anywhere' }}>{req.reason || '-'}</div>
+                    {req.attachment && <a className="ui-link" style={{ fontSize: 13, marginTop: 4 }} href={req.attachment} target="_blank" rel="noreferrer"><Icon name="paperclip" size={14} />View Document</a>}
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" className="ui-btn ui-btn--success ui-btn--sm" disabled={busyId === req.id} onClick={() => approve(req)}><Icon name="check" size={15} />Approve</button>
+                      <button type="button" className="ui-btn ui-btn--danger ui-btn--sm" disabled={busyId === req.id} onClick={() => reject(req)}><Icon name="x" size={15} />Reject</button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {pendingApprovals.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '24px 14px', textAlign: 'center', color: C.ink400, fontSize: '14px' }}>No pending approvals</td>
-                  </tr>
-                ) : pendingApprovals.map((req) => (
-                  <tr key={req.id} style={{ borderBottom: `1px solid ${C.line}` }}>
-                    <td style={{ padding: '18px 14px' }}>
-                      <div style={{ fontWeight: 600, fontSize: '15px', color: C.navy950 }}>{req.user?.name || 'Unknown'}</div>
-                      <div style={{ fontSize: '13px', color: C.ink400, marginTop: 2 }}>
-                        {req.user?.role ? req.user.role.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : ''}
-                      </div>
-                    </td>
-                    <td style={{ padding: '18px 14px', color: C.ink600 }}>{req.user?.department || '-'}</td>
-                    <td style={{ padding: '18px 14px' }}>
-                      <span style={{
-                        padding: '5px 12px',
-                        borderRadius: '999px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        background: C.gold100,
-                        color: C.gold600
-                      }}>{req.leaveType}</span>
-                    </td>
-                    <td style={{ padding: '18px 14px', fontSize: '14px', fontWeight: 500, color: C.ink900 }}>{formatDuration(req)}</td>
-                    <td style={{ padding: '18px 14px', color: C.ink600, fontSize: '14px', maxWidth: 280, wordBreak: 'break-word' }}>
-                      <div>{req.reason || '-'}</div>
-                      {req.attachment && (
-                        <a href={req.attachment} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, color: C.navy800, fontWeight: 600, fontSize: '13px' }}>View Document</a>
-                      )}
-                    </td>
-                    <td style={{ padding: '18px 14px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          disabled={processingId === req.id}
-                          onClick={() => handleApprove(req.id)}
-                          style={{
-                            padding: '8px 16px',
-                            background: C.green700,
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            opacity: processingId === req.id ? 0.6 : 1,
-                            transition: 'transform 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
-                        >✓ Approve</button>
-                        <button
-                          disabled={processingId === req.id}
-                          onClick={() => handleReject(req.id)}
-                          style={{
-                            padding: '8px 16px',
-                            background: C.red700,
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            opacity: processingId === req.id ? 0.6 : 1,
-                            transition: 'transform 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
-                        >✗ Reject</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

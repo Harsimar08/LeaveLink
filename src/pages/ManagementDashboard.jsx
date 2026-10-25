@@ -1,386 +1,146 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
-import { getLeaveRequests, approveLeave, rejectLeave } from '../utils/api-auth'
+import React, { useState } from 'react'
+import { useLeaves } from '../utils/leavesStore'
+import useLeaveDecision from '../utils/useLeaveDecision'
 import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatDate, formatRange } from '../utils/dates'
+import { Avatar, Card, EmptyState, Icon, Kpi, PageHeader, SkeletonRows, StatusChip } from '../components/ui'
+
+const Person = ({ leave }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <Avatar name={leave.user?.name || 'Principal'} size={34} />
+    <div style={{ minWidth: 0 }}>
+      <div className="ui-cell-main">{leave.user?.name || 'Principal'}</div>
+      <div className="ui-cell-sub">{leave.user?.email}</div>
+    </div>
+  </div>
+)
 
 export default function ManagementDashboard() {
-  const navigate = useNavigate()
-  const { user, isAuthenticated } = useAuth()
-  const [leaves, setLeaves] = useState([])
-  const [principalLeaves, setPrincipalLeaves] = useState([])
-  const [allLeaves, setAllLeaves] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [processingId, setProcessingId] = useState(null)
+  const { leaves: allLeaves, loading } = useLeaves()
+  const { approve, reject, busyId } = useLeaveDecision()
   const [selectedTab, setSelectedTab] = useState('pending')
 
-  useEffect(() => {
-    if (!isAuthenticated || !user) {
-      navigate('/login')
-      return
-    }
-
-    // Only allow management role
-    if (user.role !== 'management') {
-      navigate('/dashboard')
-      return
-    }
-
-    let active = true
-    const load = async (showLoading = true) => {
-      if (showLoading) setLoading(true)
-      try {
-        const all = await getLeaveRequests()
-        if (!active) return
-        setAllLeaves(all)
-
-        // Filter Principal's leaves
-        const principalOnlyLeaves = all.filter(l => l.user?.role === 'principal')
-        setPrincipalLeaves(principalOnlyLeaves)
-
-        // Filter pending Principal's leaves
-        const pending = principalOnlyLeaves.filter(l => l.status === 'Pending')
-        setLeaves(pending)
-      } catch (err) {
-        console.error('Failed to load leaves', err)
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-
-    load()
-    const interval = setInterval(() => load(false), 15000)
-    return () => {
-      active = false
-      clearInterval(interval)
-    }
-  }, [navigate, isAuthenticated, user])
-
-  const handleApprove = async (id) => {
-    if (!window.confirm('Approve this leave request?')) return
-    try {
-      setProcessingId(id)
-      await approveLeave(id)
-      setLeaves(leaves.filter(l => l._id !== id && l.id !== id))
-      // Reload to get updated status
-      const all = await getLeaveRequests()
-      setAllLeaves(all)
-      const principalOnlyLeaves = all.filter(l => l.user?.role === 'principal')
-      setPrincipalLeaves(principalOnlyLeaves)
-    } catch (err) {
-      console.error(err)
-      alert('Approve failed: ' + (err.message || 'Unknown error'))
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const handleReject = async (id) => {
-    const reason = window.prompt('Please provide a rejection reason (optional):', '')
-    if (reason === null) return // cancelled
-    try {
-      setProcessingId(id)
-      await rejectLeave(id, reason || '')
-      setLeaves(leaves.filter(l => l._id !== id && l.id !== id))
-      // Reload to get updated status
-      const all = await getLeaveRequests()
-      setAllLeaves(all)
-      const principalOnlyLeaves = all.filter(l => l.user?.role === 'principal')
-      setPrincipalLeaves(principalOnlyLeaves)
-    } catch (err) {
-      console.error(err)
-      alert('Reject failed: ' + (err.message || 'Unknown error'))
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Approved':
-        return '#10b981'
-      case 'Rejected':
-        return '#ef4444'
-      case 'Pending':
-        return '#f59e0b'
-      case 'Cancelled':
-        return '#6b7280'
-      default:
-        return '#6b7280'
-    }
-  }
+  const principalLeaves = allLeaves
+    .filter((l) => l.user?.role === 'principal')
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+  const leaves = principalLeaves.filter((l) => l.status === 'Pending')
 
   const stats = [
-    {
-      label: 'Total Principal Leaves',
-      value: allLeaves.filter(l => l.user?.role === 'principal').length,
-      color: '#667eea'
-    },
-    {
-      label: 'Pending Approvals',
-      value: leaves.length,
-      color: '#f59e0b'
-    },
-    {
-      label: 'Approved',
-      value: principalLeaves.filter(l => l.status === 'Approved').length,
-      color: '#10b981'
-    },
-    {
-      label: 'Rejected',
-      value: principalLeaves.filter(l => l.status === 'Rejected').length,
-      color: '#ef4444'
-    }
+    { label: 'Total Principal Leaves', value: principalLeaves.length, icon: 'file' },
+    { label: 'Pending Approvals', value: leaves.length, icon: 'clock', tone: 'warning', color: 'var(--gold-700)' },
+    { label: 'Approved', value: principalLeaves.filter((l) => l.status === 'Approved').length, icon: 'checkCircle', tone: 'success', color: 'var(--success)' },
+    { label: 'Rejected', value: principalLeaves.filter((l) => l.status === 'Rejected').length, icon: 'xCircle', tone: 'danger', color: 'var(--danger)' },
   ]
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24 }}>
-        <div style={{ fontSize: 16 }}>Loading management dashboard...</div>
-      </div>
-    )
-  }
-
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ marginTop: 0, marginBottom: 24 }}>Management Dashboard</h2>
+    <div className="ui-page">
+      <PageHeader
+        eyebrow="Jagan Institute of Management Studies"
+        title="Management Dashboard"
+        subtitle="You approve leave for the Principal. All other staff leave is handled by the Principal."
+      />
 
-      {/* Stats Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: 16,
-        marginBottom: 32
-      }}>
-        {stats.map((stat, idx) => (
-          <div key={idx} style={{
-            background: '#fff',
-            padding: 20,
-            borderRadius: 12,
-            border: '1px solid #e5e7eb',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ color: '#6b7280', fontSize: 14, marginBottom: 8 }}>
-              {stat.label}
-            </div>
-            <div style={{
-              fontSize: 32,
-              fontWeight: 700,
-              color: stat.color
-            }}>
-              {stat.value}
-            </div>
-          </div>
+      <div className="ui-grid ui-grid--kpi" style={{ marginBottom: 20 }}>
+        {stats.map((stat) => (
+          <Kpi key={stat.label} label={stat.label} icon={stat.icon} tone={stat.tone}
+            value={loading ? '–' : <span style={{ color: stat.color }}>{stat.value}</span>} />
         ))}
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        marginBottom: 16,
-        borderBottom: '1px solid #e5e7eb'
-      }}>
-        <button
-          onClick={() => setSelectedTab('pending')}
-          style={{
-            padding: '12px 20px',
-            background: selectedTab === 'pending' ? '#667eea' : 'transparent',
-            color: selectedTab === 'pending' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: selectedTab === 'pending' ? '3px solid #667eea' : 'none',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            transition: 'all 0.3s'
-          }}
-        >
-          Pending ({leaves.length})
-        </button>
-        <button
-          onClick={() => setSelectedTab('all')}
-          style={{
-            padding: '12px 20px',
-            background: selectedTab === 'all' ? '#667eea' : 'transparent',
-            color: selectedTab === 'all' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: selectedTab === 'all' ? '3px solid #667eea' : 'none',
-            borderRadius: '6px 6px 0 0',
-            cursor: 'pointer',
-            fontWeight: 500,
-            transition: 'all 0.3s'
-          }}
-        >
-          All Principal Leaves ({principalLeaves.length})
-        </button>
-      </div>
+      <Card noBody>
+        <div className="table-toolbar" style={{ paddingBottom: 16, borderBottom: '1px solid var(--line)' }}>
+          <div className="ui-segmented" role="tablist" aria-label="Principal leave requests">
+            <button type="button" role="tab" aria-selected={selectedTab === 'pending'} onClick={() => setSelectedTab('pending')}>
+              Pending ({leaves.length})
+            </button>
+            <button type="button" role="tab" aria-selected={selectedTab === 'all'} onClick={() => setSelectedTab('all')}>
+              All Principal Leaves ({principalLeaves.length})
+            </button>
+          </div>
+        </div>
 
-      {/* Pending Approvals Table */}
-      {selectedTab === 'pending' && (
-        <div style={{
-          background: '#fff',
-          borderRadius: 8,
-          overflow: 'hidden'
-        }}>
-          {leaves.length === 0 ? (
-            <div style={{
-              padding: 24,
-              textAlign: 'center',
-              color: '#6b7280'
-            }}>
-              No pending approvals
-            </div>
+        {loading ? (
+          <div style={{ padding: 20 }}><SkeletonRows rows={3} height={56} /></div>
+        ) : selectedTab === 'pending' ? (
+          leaves.length === 0 ? (
+            <EmptyState icon="checkCircle" title="No pending approvals">When the Principal applies for leave, the request will appear here.</EmptyState>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="ui-table-wrap">
+              <table className="ui-table">
                 <thead>
-                  <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Principal</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Leave Type</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Dates</th>
-                    <th style={{ textAlign: 'center', padding: 16, fontWeight: 600 }}>Days</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Reason</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Document</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Actions</th>
+                  <tr>
+                    <th>Principal</th>
+                    <th>Leave Type</th>
+                    <th>Dates</th>
+                    <th style={{ textAlign: 'center' }}>Days</th>
+                    <th>Reason</th>
+                    <th>Document</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leaves.map(l => (
-                    <tr key={l._id || l.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: 16 }}>
-                        <div style={{ fontWeight: 500 }}>{l.user?.name || 'Principal'}</div>
-                        <div style={{ fontSize: 13, color: '#6b7280' }}>{l.user?.email}</div>
+                  {leaves.map((l) => (
+                    <tr key={l._id || l.id}>
+                      <td><Person leave={l} /></td>
+                      <td>{l.leaveType}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatRange(l.startDate, l.endDate)}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatLeaveDays(l)}</td>
+                      <td style={{ maxWidth: 280, overflowWrap: 'anywhere' }}>{l.reason}</td>
+                      <td>
+                        {l.attachment
+                          ? <a className="ui-link" href={l.attachment} target="_blank" rel="noreferrer"><Icon name="paperclip" size={14} />View</a>
+                          : <span className="muted">None</span>}
                       </td>
-                      <td style={{ padding: 16 }}>{l.leaveType}</td>
-                      <td style={{ padding: 16 }}>
-                        {new Date(l.startDate).toLocaleDateString()} → {new Date(l.endDate).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{formatLeaveDays(l)}</td>
-                      <td style={{ padding: 16, fontSize: 14 }}>{l.reason}</td>
-                      <td style={{ padding: 16, fontSize: 14 }}>
-                        {l.attachment ? (
-                          <a href={l.attachment} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>View</a>
-                        ) : (
-                          <span style={{ color: '#6b7280' }}>None</span>
-                        )}
-                      </td>
-                      <td style={{ padding: 16 }}>
-                        <button
-                          disabled={processingId === (l._id || l.id)}
-                          onClick={() => handleApprove(l._id || l.id)}
-                          style={{
-                            marginRight: 8,
-                            padding: '8px 12px',
-                            background: '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            opacity: processingId === (l._id || l.id) ? 0.6 : 1,
-                            transition: 'opacity 0.3s'
-                          }}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          disabled={processingId === (l._id || l.id)}
-                          onClick={() => handleReject(l._id || l.id)}
-                          style={{
-                            padding: '8px 12px',
-                            background: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            opacity: processingId === (l._id || l.id) ? 0.6 : 1,
-                            transition: 'opacity 0.3s'
-                          }}
-                        >
-                          Reject
-                        </button>
+                      <td>
+                        <div className="row-actions">
+                          <button type="button" className="ui-btn ui-btn--success ui-btn--sm" disabled={busyId === l.id} onClick={() => approve(l)}><Icon name="check" size={15} />Approve</button>
+                          <button type="button" className="ui-btn ui-btn--danger ui-btn--sm" disabled={busyId === l.id} onClick={() => reject(l)}><Icon name="x" size={15} />Reject</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* All Principal Leaves Table */}
-      {selectedTab === 'all' && (
-        <div style={{
-          background: '#fff',
-          borderRadius: 8,
-          overflow: 'hidden'
-        }}>
-          {principalLeaves.length === 0 ? (
-            <div style={{
-              padding: 24,
-              textAlign: 'center',
-              color: '#6b7280'
-            }}>
-              No Principal leave requests
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Principal</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Leave Type</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Dates</th>
-                    <th style={{ textAlign: 'center', padding: 16, fontWeight: 600 }}>Days</th>
-                    <th style={{ textAlign: 'center', padding: 16, fontWeight: 600 }}>Status</th>
-                    <th style={{ textAlign: 'left', padding: 16, fontWeight: 600 }}>Approver</th>
+          )
+        ) : principalLeaves.length === 0 ? (
+          <EmptyState icon="file" title="No Principal leave requests">The Principal hasn't applied for any leave yet.</EmptyState>
+        ) : (
+          <div className="ui-table-wrap">
+            <table className="ui-table">
+              <thead>
+                <tr>
+                  <th>Principal</th>
+                  <th>Leave Type</th>
+                  <th>Dates</th>
+                  <th style={{ textAlign: 'center' }}>Days</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th>Approver</th>
+                </tr>
+              </thead>
+              <tbody>
+                {principalLeaves.map((l) => (
+                  <tr key={l._id || l.id}>
+                    <td><Person leave={l} /></td>
+                    <td>{l.leaveType}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatRange(l.startDate, l.endDate)}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatLeaveDays(l)}</td>
+                    <td style={{ textAlign: 'center' }}><StatusChip status={l.status} /></td>
+                    <td>
+                      {l.approverName ? (
+                        <div>
+                          <div className="ui-cell-main">{l.approverName}</div>
+                          <div className="ui-cell-sub">{l.actionDate ? formatDate(l.actionDate) : ''}</div>
+                        </div>
+                      ) : <span className="muted">-</span>}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {principalLeaves.map(l => (
-                    <tr key={l._id || l.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: 16 }}>
-                        <div style={{ fontWeight: 500 }}>{l.user?.name || 'Principal'}</div>
-                        <div style={{ fontSize: 13, color: '#6b7280' }}>{l.user?.email}</div>
-                      </td>
-                      <td style={{ padding: 16 }}>{l.leaveType}</td>
-                      <td style={{ padding: 16 }}>
-                        {new Date(l.startDate).toLocaleDateString()} → {new Date(l.endDate).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: 16, textAlign: 'center', fontWeight: 500 }}>{formatLeaveDays(l)}</td>
-                      <td style={{ padding: 16, textAlign: 'center' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '6px 12px',
-                          borderRadius: 6,
-                          background: getStatusColor(l.status),
-                          color: 'white',
-                          fontSize: 13,
-                          fontWeight: 500
-                        }}>
-                          {l.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: 16, fontSize: 14 }}>
-                        {l.approverName ? (
-                          <div>
-                            <div style={{ fontWeight: 500 }}>{l.approverName}</div>
-                            <div style={{ fontSize: 13, color: '#6b7280' }}>
-                              {l.actionDate ? new Date(l.actionDate).toLocaleDateString() : ''}
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#6b7280' }}>-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

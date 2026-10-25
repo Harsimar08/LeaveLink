@@ -1,109 +1,152 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import Icon from './ui/Icon'
+import { Avatar } from './ui'
+import { titleFor } from './navigation'
+import { formatRole, isApprover } from '../utils/roles'
+import { formatRange } from '../utils/dates'
+import { formatLeaveDays } from '../utils/leaveFormat'
 
-export default function Header({onOpenRequest, onToggleSidebar, sidebarOpen}){
+// Closes a popover when clicking elsewhere or pressing Escape
+function usePopover() {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  return { open, setOpen, ref }
+}
+
+function NotificationBell({ pending }) {
+  const { open, setOpen, ref } = usePopover()
+  const count = pending.length
+  return (
+    <div className="topbar__popover" ref={ref}>
+      <button
+        type="button"
+        className="topbar__icon-btn"
+        aria-label={count ? `Notifications: ${count} leave ${count === 1 ? 'request needs' : 'requests need'} your approval` : 'Notifications'}
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="bell" size={20} />
+        {count > 0 && <span className="ui-badge">{count > 9 ? '9+' : count}</span>}
+      </button>
+      {open && (
+        <div className="ui-menu" style={{ width: 340 }}>
+          <div style={{ padding: '8px 10px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: 14 }}>Waiting for your approval</strong>
+            {count > 0 && <span className="ui-chip ui-chip--pending">{count} pending</span>}
+          </div>
+          {count === 0 ? (
+            <div style={{ padding: '14px 10px 16px', color: 'var(--ink-500)', fontSize: 14 }}>You're all caught up. New requests will show up here.</div>
+          ) : (
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {pending.slice(0, 6).map((leave) => (
+                <Link key={leave.id} to={`/leave-requests/${leave.id}`} className="notif-item" onClick={() => setOpen(false)}>
+                  <Avatar name={leave.user?.name} size={32} />
+                  <span style={{ minWidth: 0 }}>
+                    <div className="notif-item__name">{leave.user?.name || 'Staff member'}</div>
+                    <div className="notif-item__meta">{leave.leaveType} · {formatRange(leave.startDate, leave.endDate)} · {formatLeaveDays(leave)}</div>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+          <div className="ui-menu__sep" />
+          <Link to="/approvals" className="ui-menu__item" onClick={() => setOpen(false)}>
+            <Icon name="approvals" size={17} /> Open approvals
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UserMenu({ onLogout }) {
   const { user } = useAuth()
+  const { open, setOpen, ref } = usePopover()
+  return (
+    <div className="topbar__popover" ref={ref}>
+      <button
+        type="button"
+        className="topbar__user"
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={`Account menu for ${user?.name || 'user'}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Avatar name={user?.name} src={user?.profileImage} size={32} />
+        <span className="topbar__user-text">
+          <div className="topbar__user-name">{user?.name || 'User'}</div>
+          <div className="topbar__user-role">{formatRole(user?.role)}{user?.department ? ` · ${user.department}` : ''}</div>
+        </span>
+        <Icon name="chevronDown" size={16} className="chev" style={{ color: 'var(--ink-400)' }} />
+      </button>
+      {open && (
+        <div className="ui-menu" role="menu">
+          <div style={{ padding: '8px 10px 10px', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Avatar name={user?.name} src={user?.profileImage} size={40} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-500)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.email}</div>
+            </div>
+          </div>
+          <div className="ui-menu__sep" />
+          {user?.role !== 'management' && (
+            <Link to="/profile" className="ui-menu__item" role="menuitem" onClick={() => setOpen(false)}>
+              <Icon name="user" size={17} /> My profile
+            </Link>
+          )}
+          {user?.role !== 'management' && (
+            <Link to="/leave-history" className="ui-menu__item" role="menuitem" onClick={() => setOpen(false)}>
+              <Icon name="history" size={17} /> My leaves
+            </Link>
+          )}
+          <button type="button" className="ui-menu__item" role="menuitem" onClick={() => { setOpen(false); onLogout() }}>
+            <Icon name="logout" size={17} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
-  const formatRole = (role) => {
-    if (!role) return 'Faculty'
-    return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-  }
+export default function Header({ onToggleSidebar, sidebarOpen, rail, isMobile: mobile, onLogout, pending = [] }) {
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+  const { crumb, title } = titleFor(pathname)
+  const expanded = mobile ? sidebarOpen : !rail
 
   return (
     <header className="topbar">
-      <div className="brand" style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '14px'
-      }}>
-        {onToggleSidebar && (
-          <button 
-            onClick={onToggleSidebar}
-            aria-label={sidebarOpen ? "Close navigation menu" : "Open navigation menu"}
-            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            className="sidebar-toggle-btn"
-            style={{
-              background: sidebarOpen ? 'rgba(201,162,39,0.2)' : 'rgba(255,255,255,0.08)',
-              border: sidebarOpen ? '1px solid rgba(201,162,39,0.5)' : '1px solid rgba(255,255,255,0.18)',
-              color: 'white',
-              borderRadius: 10,
-              padding: '8px 12px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 18,
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: sidebarOpen ? '0 0 10px rgba(201,162,39,0.2)' : 'none'
-            }}>
-            {sidebarOpen ? '◀' : '☰'}
-          </button>
-        )}
-        <div style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f4f5f7 100%)',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 4,
-          boxShadow: '0 0 0 2px rgba(201,162,39,0.4), 0 4px 12px rgba(0,0,0,0.25)',
-          flexShrink: 0
-        }}>
-          <div style={{
-            width: '100%',
-            height: '100%',
-            display: 'grid',
-            placeItems: 'center',
-            color: '#B08A2E',
-            fontWeight: 800,
-            letterSpacing: '0.1em',
-            fontSize: 16
-          }}>
-            J
-          </div>
-        </div>
-        <div className="brand-titles" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={{ textTransform: 'uppercase', fontSize: 12, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.68)', fontWeight: 700 }}>
-            Jagan Institute of Management Studies
-          </span>
-          <span style={{ fontSize: 19, fontWeight: 800, color: 'white', letterSpacing: '-0.01em', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            LeaveLink <span style={{ opacity: 0.75, fontWeight: 500, fontSize: 13, color: '#F7D780' }}>· Leave Portal</span>
-          </span>
-        </div>
+      <button
+        type="button"
+        className="topbar__icon-btn"
+        onClick={onToggleSidebar}
+        aria-label={expanded ? 'Collapse navigation' : 'Expand navigation'}
+        aria-expanded={expanded}
+        title={expanded ? 'Collapse navigation' : 'Expand navigation'}
+      >
+        <Icon name={mobile ? 'menu' : 'sidebar'} size={20} />
+      </button>
+      <div className="topbar__title">
+        <div className="topbar__crumb">{crumb}</div>
+        <div className="topbar__heading">{title}</div>
       </div>
-
-      <div className="top-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-
-        <div className="top-user" style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 12,
-          padding: '6px 14px',
-          background: 'rgba(255,255,255,0.06)',
-          borderRadius: 14,
-          border: '1px solid rgba(255,255,255,0.12)'
-        }}>
-          <div className="name-role" style={{ textAlign: 'right', lineHeight: 1.25 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{user?.name || 'User'}</div>
-            <div style={{ fontSize: 12, color: '#F7D780', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 2 }}>
-              {formatRole(user?.role)} · {user?.department || 'Dept.'}
-            </div>
-          </div>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', border: '2px solid rgba(201,162,39,0.7)', background: '#0B1D30', flexShrink: 0, display: 'grid', placeItems: 'center' }}>
-            {user?.profileImage ? (
-              <img 
-                src={user.profileImage} 
-                alt="avatar" 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-              />
-            ) : (
-              <span style={{ color: '#F7D780', fontWeight: 700, fontSize: 13, letterSpacing: '0.04em' }}>
-                {user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'HS'}
-              </span>
-            )}
-          </div>
-        </div>
+      <div className="topbar__actions">
+        {isApprover(user?.role) && <NotificationBell pending={pending} />}
+        <UserMenu onLogout={onLogout} />
       </div>
     </header>
   )

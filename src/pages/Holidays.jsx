@@ -1,66 +1,87 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { apiRequest, getToken } from '../utils/api-auth'
+import { apiRequest } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
+import { fetchHolidays, longWeekendNote } from '../utils/holidays'
+import { useFeedback } from '../components/ui/Feedback'
+import { Card, EmptyState, Icon, Kpi, PageHeader, SkeletonRows, Spinner } from '../components/ui'
 
 // Holiday dates are calendar days; parse them in local time so they never shift a day
 const parseDay = (value) => new Date(`${value}T00:00:00`)
 
 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const dayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 
-const COLORS = {
-  navy950: '#0a1220',
-  navy900: '#0e1a2e',
-  navy800: '#152742',
-  navy700: '#1c3357',
-  gold500: '#c79a3a',
-  gold300: '#e8c877',
-  goldTint: '#f7ecd0',
-  paper: '#f6f7f9',
-  white: '#ffffff',
-  ink900: '#101826',
-  ink600: '#5b6779',
-  ink400: '#94a0b3',
-  line: '#e6e9ef',
-  success: '#1f8a5f',
-  successTint: '#e7f5ee',
+function HolidayRow({ holiday, compact }) {
+  const date = parseDay(holiday.date)
+  const hint = longWeekendNote(holiday)
+  return (
+    <div className={`tto-holiday-row holiday-row holiday-row--${holiday.type}${compact ? ' is-compact' : ''}`}>
+      <div className="holiday-row__date">
+        <b>{date.getDate()}</b>
+        <span>{monthNames[date.getMonth()].slice(0, 3).toUpperCase()}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="holiday-row__name">{holiday.name}</div>
+        <div className="holiday-row__meta">
+          <span>{holiday.day}</span>
+          {hint && <span className="holiday-row__hint"><Icon name="sun" size={13} />{hint}</span>}
+        </div>
+      </div>
+      <span className={`holiday-type holiday-type--${holiday.type}`}>{holiday.type}</span>
+    </div>
+  )
 }
 
-// ---- Icons (inline SVG, no emoji) ----
-const IconCalendar = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>
-)
-const IconList = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>
-)
-const IconTarget = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.6" fill="currentColor" /></svg>
-)
-const IconBulb = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M9 18h6M10 21h4" /><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.44 1 1.2 1 2.1h5c0-.9.4-1.66 1-2.1A6 6 0 0 0 12 3Z" /></svg>
-)
-const IconChevronLeft = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M15 18l-6-6 6-6" /></svg>
-)
-const IconChevronRight = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><path d="M9 18l6-6-6-6" /></svg>
-)
-const IconEmpty = (p) => (
-  <svg viewBox="0 0 24 24" {...p}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /><path d="M9 15l6-4M9 11l6 4" /></svg>
-)
+function MiniMonth({ year, month, holidays, onOpen }) {
+  const offset = new Date(year, month, 1).getDay()
+  const days = new Date(year, month + 1, 0).getDate()
+  const byDay = Object.fromEntries(holidays.map((h) => [parseDay(h.date).getDate(), h]))
+  const todayISO = new Date().toDateString()
+  return (
+    <button type="button" className="mini-month" onClick={onOpen} aria-label={`${monthNames[month]} ${year}: ${holidays.length} holiday${holidays.length === 1 ? '' : 's'}. Open month.`}>
+      <div className="mini-month__head">
+        <span>{monthNames[month]}</span>
+        {holidays.length > 0 && <span className="ui-badge">{holidays.length}</span>}
+      </div>
+      <div className="mini-month__grid" aria-hidden="true">
+        {dayLetters.map((d, i) => <span key={`h${i}`} className="mini-month__wd">{d}</span>)}
+        {Array.from({ length: offset }, (_, i) => <span key={`e${i}`} />)}
+        {Array.from({ length: days }, (_, i) => {
+          const h = byDay[i + 1]
+          const isToday = new Date(year, month, i + 1).toDateString() === todayISO
+          return (
+            <span key={i} title={h ? h.name : undefined}
+              className={`${h ? `is-holiday is-${h.type}` : ''}${isToday ? ' is-today' : ''}`}>{i + 1}</span>
+          )
+        })}
+      </div>
+      <div className="mini-month__names">
+        {holidays.slice(0, 2).map((h) => <span key={h.date + h.name}>{parseDay(h.date).getDate()} · {h.name}</span>)}
+        {holidays.length > 2 && <span>+{holidays.length - 2} more</span>}
+      </div>
+    </button>
+  )
+}
 
 export default function Holidays() {
   const today = new Date()
+  const { user } = useAuth()
+  const { confirm, toast } = useFeedback()
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
-  const [viewType, setViewType] = useState('calendar') // 'calendar' or 'list'
+  const [viewType, setViewType] = useState('calendar') // 'calendar', 'year' or 'list'
   const [filterType, setFilterType] = useState('all') // 'all', 'national', 'religious'
   const [holidays, setHolidays] = useState([])
   const [holidaySource, setHolidaySource] = useState(null)
   const [unreadablePdfs, setUnreadablePdfs] = useState([])
   const [holidaysLoading, setHolidaysLoading] = useState(true)
+  const [pdfs, setPdfs] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const isPrincipal = user?.role === 'principal'
 
-  const loadHolidays = async () => {
+  const loadHolidays = async (force = false) => {
     try {
-      const res = await apiRequest('/holidays')
+      const res = await fetchHolidays({ force })
       const list = res.holidays || []
       setHolidays(list)
       setHolidaySource(res.source || null)
@@ -74,14 +95,25 @@ export default function Holidays() {
           setCursor({ year: first.getFullYear(), month: first.getMonth() })
         }
       }
-    } catch (e) {
-      console.error('Failed to load holidays', e)
     } finally {
       setHolidaysLoading(false)
     }
   }
 
-  useEffect(() => { loadHolidays() }, [])
+  const loadPdfs = async () => {
+    try {
+      const res = await apiRequest('/holidays/pdfs')
+      setPdfs(res.pdfs || [])
+    } catch {
+      setPdfs([])
+    }
+  }
+
+  useEffect(() => {
+    // A fresh copy, in case the Principal changed the list since it was cached
+    loadHolidays(true)
+    loadPdfs()
+  }, [])
 
   const yearLabel = useMemo(() => {
     if (!holidays.length) return ''
@@ -90,16 +122,14 @@ export default function Holidays() {
     return first === last ? String(first) : `${first}–${last}`
   }, [holidays])
 
-  const filteredHolidays = useMemo(() => {
-    return holidays.filter(holiday => {
-      if (filterType === 'all') return true
-      return holiday.type === filterType
-    })
-  }, [holidays, filterType])
+  const filteredHolidays = useMemo(
+    () => holidays.filter((holiday) => filterType === 'all' || holiday.type === filterType),
+    [holidays, filterType]
+  )
 
   const holidaysByMonth = useMemo(() => {
     const grouped = {}
-    filteredHolidays.forEach(holiday => {
+    filteredHolidays.forEach((holiday) => {
       const date = parseDay(holiday.date)
       const key = `${date.getFullYear()}-${date.getMonth()}`
       if (!grouped[key]) grouped[key] = []
@@ -117,42 +147,21 @@ export default function Holidays() {
   const upcomingHolidays = useMemo(() => {
     const startOfToday = new Date()
     startOfToday.setHours(0, 0, 0, 0)
-    return filteredHolidays
-      .filter(h => parseDay(h.date) >= startOfToday)
-      .slice(0, 5)
+    return filteredHolidays.filter((h) => parseDay(h.date) >= startOfToday).slice(0, 5)
   }, [filteredHolidays])
 
   const stats = useMemo(() => {
     const total = filteredHolidays.length
-    const national = filteredHolidays.filter(h => h.type === 'national').length
-    const religious = filteredHolidays.filter(h => h.type === 'religious').length
-    const longWeekends = filteredHolidays.filter(h =>
-      h.day === 'Monday' || h.day === 'Friday'
-    ).length
+    const national = filteredHolidays.filter((h) => h.type === 'national').length
+    const religious = filteredHolidays.filter((h) => h.type === 'religious').length
+    const longWeekends = filteredHolidays.filter((h) => h.day === 'Monday' || h.day === 'Friday').length
     return { total, national, religious, longWeekends }
   }, [filteredHolidays])
 
-  // PDFs state
-  const { user } = useAuth()
-  const [pdfs, setPdfs] = useState([])
-  const [uploading, setUploading] = useState(false)
-
-  const loadPdfs = async () => {
-    try {
-      const res = await apiRequest('/holidays/pdfs')
-      setPdfs(res.pdfs || [])
-    } catch (e) {
-      console.error('Failed to load PDFs', e)
-    }
-  }
-
-  useEffect(() => { loadPdfs() }, [])
-
-  const handleUpload = async (ev) => {
-    const file = ev.target.files[0]
+  const uploadFile = async (file) => {
     if (!file) return
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Only PDF files are allowed')
+      toast('Only PDF files are allowed', 'error')
       return
     }
     const form = new FormData()
@@ -161,428 +170,204 @@ export default function Holidays() {
     try {
       const response = await apiRequest('/holidays/pdfs', { method: 'POST', body: form })
       if (response && response.success) {
-        await Promise.all([loadPdfs(), loadHolidays()])
+        await Promise.all([loadPdfs(), loadHolidays(true)])
         if (response.holidaysFound > 0) {
-          alert(`Holiday list updated: ${response.holidaysFound} holidays found in ${response.filename}.`)
+          toast(`Holiday list updated: ${response.holidaysFound} holidays found in ${response.filename}.`, 'success')
         } else {
-          alert(`${response.filename} was uploaded, but no holidays could be read from it. ` +
-            'Please upload a text-based PDF (not a scanned image) that lists each holiday with its date.')
+          toast(`${response.filename} was uploaded, but no holidays could be read from it. ` +
+            'Please upload a text-based PDF (not a scanned image) that lists each holiday with its date.', 'error')
         }
       } else {
-        alert(response?.message || 'Upload failed')
+        toast(response?.message || 'Upload failed', 'error')
       }
     } catch (e) {
-      console.error(e)
-      alert('Upload failed: ' + (e.message || e))
+      toast('Upload failed: ' + (e.message || e), 'error')
     } finally {
       setUploading(false)
-      ev.target.value = ''
     }
+  }
+
+  const handleUpload = async (ev) => {
+    const file = ev.target.files[0]
+    await uploadFile(file)
+    ev.target.value = ''
   }
 
   const handleDelete = async (filename) => {
-    if (!confirm('Delete this PDF?')) return
+    const ok = await confirm({
+      title: 'Delete this PDF?',
+      message: `${filename} will be removed and its holidays will no longer be shown to staff.`,
+      confirmLabel: 'Delete PDF',
+      tone: 'danger',
+      icon: 'trash',
+    })
+    if (!ok) return
     try {
       await apiRequest(`/holidays/pdfs/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-      await Promise.all([loadPdfs(), loadHolidays()])
-    } catch (e) {
-      console.error(e)
-      alert('Delete failed')
+      await Promise.all([loadPdfs(), loadHolidays(true)])
+      toast(`${filename} deleted.`, 'success')
+    } catch {
+      toast('Delete failed', 'error')
     }
   }
 
-  // Navy for national holidays, gold for religious — ties into the institute palette
-  const typeColors = {
-    national: COLORS.navy800,
-    religious: COLORS.gold500
-  }
-
-  const cardStyle = {
-    background: COLORS.white,
-    padding: 24,
-    borderRadius: 16,
-    border: `1px solid ${COLORS.line}`,
-    boxShadow: '0 1px 3px rgba(16,24,38,0.05)',
-  }
-
-  const pillBtn = (active, accent = COLORS.navy900) => ({
-    padding: '8px 16px',
-    borderRadius: 9,
-    border: `1.5px solid ${active ? accent : COLORS.line}`,
-    background: active ? accent : COLORS.white,
-    color: active ? COLORS.white : COLORS.ink600,
-    cursor: 'pointer',
-    fontWeight: 600,
-    fontSize: 13,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 7,
-    transition: 'all .15s ease',
-  })
-
   return (
-    <div style={{ padding: '40px 24px', background: COLORS.paper, minHeight: 'calc(100vh - 64px)', fontFamily: "'Inter', sans-serif" }}>
+    <div className="ui-page">
+      <PageHeader
+        eyebrow="Institute Calendar"
+        title={`Holidays ${yearLabel}`}
+        subtitle={holidaySource
+          ? <>Holidays observed at JIMS, as listed in <a className="ui-link" href={holidaySource.url} target="_blank" rel="noreferrer">{holidaySource.filename}</a>.</>
+          : 'Holidays observed at JIMS, as listed in the institute holiday PDF.'}
+      />
 
-      {/* Header */}
-      <div style={{ marginBottom: 28, maxWidth: 1160, margin: '0 auto 28px' }}>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: COLORS.gold500, marginBottom: 10, fontWeight: 500 }}>
-          Institute Calendar
-        </div>
-        <h2 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 600, color: COLORS.ink900 }}>
-          Holidays {yearLabel}
-        </h2>
-        <div style={{ color: COLORS.ink600, fontSize: 14.5, marginTop: 8 }}>
-          {holidaySource
-            ? <>Holidays observed at JIMS, as listed in <a href={holidaySource.url} target="_blank" rel="noreferrer" style={{ color: COLORS.navy800, fontWeight: 600 }}>{holidaySource.filename}</a>.</>
-            : 'Holidays observed at JIMS, as listed in the institute holiday PDF.'}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-
-        {holidays.length > 0 && (<>
-        {/* Stats Cards */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 14,
-          marginBottom: 20
-        }}>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Total Holidays</div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.ink900 }}>{stats.total}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>National</div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.navy800 }}>{stats.national}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Religious</div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.gold500 }}>{stats.religious}</div>
-          </div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginBottom: 6 }}>Long Weekends</div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontSize: 30, fontWeight: 600, color: COLORS.success }}>{stats.longWeekends}</div>
-          </div>
+      {holidays.length > 0 && (<>
+        <div className="ui-grid ui-grid--kpi" style={{ marginBottom: 20 }}>
+          <Kpi label="Total Holidays" value={stats.total} icon="calendar" />
+          <Kpi label="National" value={<span style={{ color: 'var(--navy-800)' }}>{stats.national}</span>} icon="building" />
+          <Kpi label="Religious" value={<span style={{ color: 'var(--gold-600)' }}>{stats.religious}</span>} icon="sun" tone="gold" />
+          <Kpi label="Long Weekends" value={<span style={{ color: 'var(--success)' }}>{stats.longWeekends}</span>} icon="trend" tone="success" />
         </div>
 
-        {/* Controls */}
-        <div style={{
-          ...cardStyle,
-          marginBottom: 20,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 16,
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
+        <div className="ui-card holiday-controls">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 13, fontWeight: 600, letterSpacing: '0.03em', textTransform: 'uppercase', color: COLORS.ink600, marginRight: 4 }}>Filter</label>
-            <button onClick={() => setFilterType('all')} style={pillBtn(filterType === 'all', COLORS.navy900)}>All</button>
-            <button onClick={() => setFilterType('national')} style={pillBtn(filterType === 'national', COLORS.navy800)}>National</button>
-            <button onClick={() => setFilterType('religious')} style={pillBtn(filterType === 'religious', COLORS.gold500)}>Religious</button>
+            <span className="ui-label" style={{ margin: 0 }}>Filter</span>
+            <div className="ui-pills" role="group" aria-label="Filter holidays">
+              {[['all', 'All'], ['national', 'National'], ['religious', 'Religious']].map(([value, label]) => (
+                <button key={value} type="button" className="ui-pill" aria-pressed={filterType === value} onClick={() => setFilterType(value)}>{label}</button>
+              ))}
+            </div>
           </div>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button onClick={() => setViewType('calendar')} style={pillBtn(viewType === 'calendar', COLORS.navy900)}>
-              <IconCalendar style={{ width: 14, height: 14, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} />
-              Calendar
-            </button>
-            <button onClick={() => setViewType('list')} style={pillBtn(viewType === 'list', COLORS.navy900)}>
-              <IconList style={{ width: 14, height: 14, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} />
-              List
-            </button>
+          <div className="ui-segmented" role="group" aria-label="View">
+            <button type="button" aria-pressed={viewType === 'calendar'} onClick={() => setViewType('calendar')}><Icon name="calendar" size={15} /> Calendar</button>
+            <button type="button" aria-pressed={viewType === 'year'} onClick={() => setViewType('year')}><Icon name="grid" size={15} /> Year</button>
+            <button type="button" aria-pressed={viewType === 'list'} onClick={() => setViewType('list')}><Icon name="list" size={15} /> List</button>
           </div>
         </div>
-        </>)}
+      </>)}
 
-        <div className="tto-holiday-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
-          {/* Main Content */}
-          <div>
-            {holidaysLoading ? (
-              <div style={{ ...cardStyle, textAlign: 'center', padding: '56px 20px', color: COLORS.ink600, fontSize: 14 }}>
-                Loading holidays...
+      <div className="tto-holiday-layout">
+        <div style={{ minWidth: 0 }}>
+          {holidaysLoading ? (
+            <Card><span className="sr-only">Loading holidays...</span><SkeletonRows rows={4} height={68} /></Card>
+          ) : holidays.length === 0 ? (
+            <Card>
+              <EmptyState icon="calendar" title={unreadablePdfs.length > 0 ? 'The uploaded holiday list could not be read.' : 'No holiday list has been uploaded yet.'}>
+                {unreadablePdfs.length > 0
+                  ? `No holidays could be read from ${unreadablePdfs.join(', ')}. The PDF must contain selectable text (not a scanned image) listing each holiday with its date.`
+                  : isPrincipal
+                    ? 'Upload the institute holiday PDF using “Upload PDF” and the holidays will appear here.'
+                    : 'Holidays will appear here once the Principal uploads the institute holiday list.'}
+              </EmptyState>
+            </Card>
+          ) : viewType === 'calendar' ? (
+            <Card noBody>
+              <div className="holiday-month-bar">
+                <button type="button" className="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm" onClick={() => moveMonth(-1)} aria-label="Previous month"><Icon name="chevronLeft" size={17} /></button>
+                <h3>{monthNames[cursor.month]} {cursor.year}</h3>
+                <button type="button" className="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm" onClick={() => moveMonth(1)} aria-label="Next month"><Icon name="chevronRight" size={17} /></button>
               </div>
-            ) : holidays.length === 0 ? (
-              <div style={{ ...cardStyle, textAlign: 'center', padding: '56px 24px', color: COLORS.ink600 }}>
-                <IconEmpty style={{ width: 38, height: 38, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.4, marginBottom: 14 }} />
-                <div style={{ fontSize: 17, fontWeight: 700, color: COLORS.ink900, marginBottom: 8 }}>
-                  {unreadablePdfs.length > 0 ? 'The uploaded holiday list could not be read.' : 'No holiday list has been uploaded yet.'}
-                </div>
-                {unreadablePdfs.length > 0 ? (
-                  <div style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 460, margin: '0 auto' }}>
-                    No holidays could be read from {unreadablePdfs.join(', ')}. The PDF must contain selectable text (not a scanned image) listing each holiday with its date.
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-                    {user?.role === 'principal'
-                      ? 'Upload the institute holiday PDF using “Upload PDF” and the holidays will appear here.'
-                      : 'Holidays will appear here once the Principal uploads the institute holiday list.'}
-                  </div>
-                )}
-              </div>
-            ) : viewType === 'calendar' ? (
-              <div style={cardStyle}>
-                {/* Month Selector */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: 22,
-                  paddingBottom: 16,
-                  borderBottom: `1px solid ${COLORS.line}`
-                }}>
-                  <button
-                    onClick={() => moveMonth(-1)}
-                    aria-label="Previous month"
-                    style={{
-                      background: COLORS.paper,
-                      border: `1px solid ${COLORS.line}`,
-                      borderRadius: 9,
-                      cursor: 'pointer',
-                      color: COLORS.navy800,
-                      padding: 8,
-                      display: 'flex',
-                    }}
-                  >
-                    <IconChevronLeft style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} />
-                  </button>
-                  <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: COLORS.ink900 }}>
-                    {monthNames[cursor.month]} {cursor.year}
-                  </h3>
-                  <button
-                    onClick={() => moveMonth(1)}
-                    aria-label="Next month"
-                    style={{
-                      background: COLORS.paper,
-                      border: `1px solid ${COLORS.line}`,
-                      borderRadius: 9,
-                      cursor: 'pointer',
-                      color: COLORS.navy800,
-                      padding: 8,
-                      display: 'flex',
-                    }}
-                  >
-                    <IconChevronRight style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }} />
-                  </button>
-                </div>
-
-                {/* Holidays for selected month */}
+              <div className="ui-card__body">
                 {currentMonthHolidays.length > 0 ? (
                   <div style={{ display: 'grid', gap: 10 }}>
-                    {currentMonthHolidays.map((holiday, idx) => (
-                      <div
-                        key={idx}
-                        className="tto-holiday-row"
-                        style={{
-                          background: COLORS.paper,
-                          padding: 18,
-                          borderRadius: 12,
-                          border: `1px solid ${COLORS.line}`,
-                          borderLeft: `3px solid ${typeColors[holiday.type]}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 16,
-                          transition: 'transform 0.2s ease',
-                        }}
-                      >
-                        <div style={{
-                          background: typeColors[holiday.type],
-                          color: 'white',
-                          padding: '10px 14px',
-                          borderRadius: 10,
-                          textAlign: 'center',
-                          minWidth: 62,
-                        }}>
-                          <div style={{ fontFamily: "'Fraunces', serif", fontSize: 21, fontWeight: 600 }}>
-                            {parseDay(holiday.date).getDate()}
-                          </div>
-                          <div style={{ fontSize: 12, opacity: 0.85, letterSpacing: '0.03em' }}>
-                            {monthNames[parseDay(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
-                          </div>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.ink900, marginBottom: 4 }}>
-                            {holiday.name}
-                          </div>
-                          <div style={{ fontSize: 13.5, color: COLORS.ink600, display: 'flex', gap: 10, alignItems: 'center' }}>
-                            <span>{holiday.day}</span>
-                            <span style={{ color: COLORS.ink400 }}>•</span>
-                            <span style={{
-                              background: `${typeColors[holiday.type]}1a`,
-                              color: typeColors[holiday.type],
-                              padding: '2px 9px',
-                              borderRadius: 5,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.03em',
-                            }}>
-                              {holiday.type}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                    {currentMonthHolidays.map((holiday) => <HolidayRow key={holiday.date + holiday.name} holiday={holiday} />)}
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '56px 20px', color: COLORS.ink600 }}>
-                    <IconEmpty style={{ width: 34, height: 34, stroke: COLORS.ink400, fill: 'none', strokeWidth: 1.4, marginBottom: 14 }} />
-                    <div style={{ fontSize: 14 }}>No holidays in {monthNames[cursor.month]} {cursor.year}</div>
-                  </div>
+                  <EmptyState icon="calendar" title={`No holidays in ${monthNames[cursor.month]} ${cursor.year}`} />
                 )}
               </div>
-            ) : (
-              <div style={cardStyle}>
-                <h3 style={{ margin: '0 0 18px 0', fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: COLORS.ink900 }}>
-                  All Holidays {yearLabel}
-                </h3>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {filteredHolidays.map((holiday, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: COLORS.paper,
-                        padding: 14,
-                        borderRadius: 12,
-                        border: `1px solid ${COLORS.line}`,
-                        borderLeft: `3px solid ${typeColors[holiday.type]}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 16,
-                      }}
-                    >
-                      <div style={{
-                        background: typeColors[holiday.type],
-                        color: 'white',
-                        padding: '9px 13px',
-                        borderRadius: 10,
-                        textAlign: 'center',
-                        minWidth: 62,
-                      }}>
-                        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600 }}>
-                          {parseDay(holiday.date).getDate()}
-                        </div>
-                        <div style={{ fontSize: 12, opacity: 0.85 }}>
-                          {monthNames[parseDay(holiday.date).getMonth()].slice(0, 3).toUpperCase()}
-                        </div>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14.5, fontWeight: 700, color: COLORS.ink900, marginBottom: 2 }}>
-                          {holiday.name}
-                        </div>
-                        <div style={{ fontSize: 13, color: COLORS.ink600 }}>
-                          {holiday.day}
-                        </div>
-                      </div>
-                      <div style={{
-                        background: `${typeColors[holiday.type]}1a`,
-                        color: typeColors[holiday.type],
-                        padding: '4px 11px',
-                        borderRadius: 6,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.03em',
-                      }}>
-                        {holiday.type}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div>
-            {/* Holiday PDFs (moved to sidebar above Did you know) */}
-            <div style={{ ...cardStyle, marginBottom: 20 }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: 14.5, fontWeight: 700 }}>Institute Holiday PDFs</h3>
-              {user?.role === 'principal' && (
-                <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input id="holiday-upload" type="file" accept="application/pdf" onChange={handleUpload} style={{ display: 'none' }} />
-                  <label htmlFor="holiday-upload" style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: 8, border: `1px solid ${COLORS.line}`, background: COLORS.white }}> {uploading ? 'Uploading...' : 'Upload PDF'} </label>
-                </div>
+            </Card>
+          ) : viewType === 'year' ? (
+            <Card
+              title={`Year ${cursor.year}`}
+              icon="grid"
+              subtitle="Click a month to open it."
+              actions={(
+                <>
+                  <button type="button" className="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm" onClick={() => setCursor((c) => ({ ...c, year: c.year - 1 }))} aria-label="Previous year"><Icon name="chevronLeft" size={17} /></button>
+                  <button type="button" className="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm" onClick={() => setCursor((c) => ({ ...c, year: c.year + 1 }))} aria-label="Next year"><Icon name="chevronRight" size={17} /></button>
+                </>
               )}
-              <div style={{ display: 'grid', gap: 8 }}>
-                {pdfs.length === 0 ? <div style={{ color: COLORS.ink600 }}>No PDFs uploaded yet.</div> : pdfs.map(p => (
-                  <div key={p.filename} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: COLORS.paper, padding: 8, borderRadius: 8, border: `1px solid ${COLORS.line}` }}>
-                    <a href={p.url} target="_blank" rel="noreferrer" style={{ color: COLORS.navy800, fontWeight: 700 }}>{p.filename}</a>
-                    {user?.role === 'principal' ? <button onClick={() => handleDelete(p.filename)} style={{ background: 'transparent', border: 'none', color: '#c23a3a', cursor: 'pointer' }}>Delete</button> : null}
-                  </div>
+            >
+              <div className="year-grid">
+                {monthNames.map((_, m) => (
+                  <MiniMonth key={m} year={cursor.year} month={m} holidays={holidaysByMonth[`${cursor.year}-${m}`] || []}
+                    onOpen={() => { setCursor({ year: cursor.year, month: m }); setViewType('calendar') }} />
                 ))}
               </div>
-            </div>
-            {holidays.length > 0 && (<>
-            {/* Upcoming Holidays */}
-            <div style={{ ...cardStyle, marginBottom: 20 }}>
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '0 0 16px 0', fontSize: 15.5, fontWeight: 700, color: COLORS.ink900 }}>
-                <IconTarget style={{ width: 16, height: 16, stroke: COLORS.navy800, fill: 'none', strokeWidth: 1.8 }} />
-                Upcoming Holidays
-              </h3>
+              <div className="cal-legend">
+                <span><i style={{ background: 'var(--navy-800)', border: 0 }} />National</span>
+                <span><i style={{ background: 'var(--gold-500)', border: 0 }} />Religious</span>
+                <span><i style={{ border: '2px solid var(--danger)' }} />Today</span>
+              </div>
+            </Card>
+          ) : (
+            <Card title={`All Holidays ${yearLabel}`} icon="list">
               <div style={{ display: 'grid', gap: 10 }}>
-                {upcomingHolidays.length > 0 ? upcomingHolidays.map((holiday, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      background: COLORS.paper,
-                      padding: 12,
-                      borderRadius: 10,
-                      borderLeft: `3px solid ${typeColors[holiday.type]}`
-                    }}
-                  >
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.ink900, marginBottom: 3 }}>
-                      {holiday.name}
-                    </div>
-                    <div style={{ fontSize: 13, color: COLORS.ink600 }}>
-                      {parseDay(holiday.date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })} • {holiday.day}
+                {filteredHolidays.map((holiday) => <HolidayRow key={holiday.date + holiday.name} holiday={holiday} compact />)}
+              </div>
+            </Card>
+          )}
+        </div>
+
+        <div className="ui-stack">
+          <Card title="Institute Holiday PDFs" icon="file">
+            {isPrincipal && (
+              <div
+                className={`dropzone holiday-drop${dragging ? ' is-dragging' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); uploadFile(e.dataTransfer.files?.[0]) }}
+              >
+                <input id="holiday-upload" type="file" accept="application/pdf" onChange={handleUpload} hidden />
+                <Icon name="upload" size={20} />
+                <span>Drop the holiday PDF here or</span>
+                <label htmlFor="holiday-upload" className="ui-btn ui-btn--secondary ui-btn--sm" style={{ cursor: 'pointer' }}>
+                  {uploading ? <><Spinner /> Uploading...</> : 'Upload PDF'}
+                </label>
+              </div>
+            )}
+            <div style={{ display: 'grid', gap: 8 }}>
+              {pdfs.length === 0 ? <div className="muted" style={{ fontSize: 14 }}>No PDFs uploaded yet.</div> : pdfs.map((p) => (
+                <div key={p.filename} className="pdf-row">
+                  <Icon name="file" size={16} />
+                  <a href={p.url} target="_blank" rel="noreferrer" className="ui-link" style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{p.filename}</a>
+                  {isPrincipal ? (
+                    <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => handleDelete(p.filename)} style={{ color: 'var(--danger)' }}>
+                      <Icon name="trash" size={15} />Delete
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {holidays.length > 0 && (<>
+            <Card title="Upcoming Holidays" icon="clock">
+              <div style={{ display: 'grid', gap: 10 }}>
+                {upcomingHolidays.length > 0 ? upcomingHolidays.map((holiday) => (
+                  <div key={holiday.date + holiday.name} className={`upcoming-item upcoming-item--${holiday.type}`}>
+                    <div className="ui-cell-main">{holiday.name}</div>
+                    <div className="ui-cell-sub">
+                      {parseDay(holiday.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} • {holiday.day}
                     </div>
                   </div>
                 )) : (
-                  <div style={{ fontSize: 13, color: COLORS.ink600 }}>No upcoming holidays in this filter.</div>
+                  <div className="muted" style={{ fontSize: 13.5 }}>No upcoming holidays in this filter.</div>
                 )}
               </div>
-            </div>
+            </Card>
 
-            {/* Quick Stats */}
-            <div style={{
-              background: `linear-gradient(165deg, ${COLORS.navy900} 0%, ${COLORS.navy950} 100%)`,
-              padding: 22,
-              borderRadius: 16,
-              color: COLORS.white,
-              position: 'relative',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', width: 220, height: 220, right: -80, top: -90,
-                background: 'radial-gradient(circle, rgba(199,154,58,0.22), transparent 65%)',
-                pointerEvents: 'none',
-              }} />
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 9, margin: '0 0 12px 0', fontSize: 15.5, fontWeight: 700, position: 'relative', zIndex: 1 }}>
-                <IconBulb style={{ width: 17, height: 17, stroke: COLORS.gold300, fill: 'none', strokeWidth: 1.8 }} />
-                Did you know?
-              </h3>
-              <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(255,255,255,0.75)', position: 'relative', zIndex: 1 }}>
-                You have <strong style={{ color: COLORS.gold300 }}>{stats.longWeekends} long weekends</strong> in this holiday list —
+            <div className="did-you-know">
+              <h3><Icon name="info" size={17} />Did you know?</h3>
+              <p>
+                You have <strong>{stats.longWeekends} long weekends</strong> in this holiday list —
                 good opportunities to plan ahead with your department.
-              </div>
+              </p>
             </div>
-            </>)}
-          </div>
+          </>)}
         </div>
       </div>
-
-      <style>{`
-        .tto-holiday-row:hover { transform: translateX(4px); }
-        @media (max-width: 900px) {
-          .tto-holiday-layout { grid-template-columns: minmax(0, 1fr) !important; }
-        }
-      `}</style>
     </div>
   )
 }

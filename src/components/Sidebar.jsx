@@ -1,251 +1,62 @@
 import React from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import Icon from './ui/Icon'
+import { navGroupsFor } from './navigation'
+import logo from '../assets/jims-logo.jpg'
 
-export default function Sidebar({open, onClose}){
-  const navigate = useNavigate()
-  const { logout, user } = useAuth()
+export default function Sidebar({ open, rail, onClose, onLogout, pendingCount = 0 }) {
+  const { user } = useAuth()
+  const groups = navGroupsFor(user?.role)
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      logout()
-      navigate('/login')
-      onClose()
-    }
-  }
-
-  // Format role for display
-  const formatRole = (role) => {
-    if (!role) return 'Faculty'
-    return role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-  }
-
-  const isManagement = user?.role === 'management'
-  const dashboardPath = isManagement
-    ? '/management-dashboard'
-    : user?.role === 'principal'
-      ? '/principal-dashboard'
-      : '/dashboard'
-
-  const sectionLabelStyle = {
-    textTransform: 'uppercase',
-    letterSpacing: '0.12em',
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.55)',
-    fontWeight: 700,
-    paddingLeft: 8,
-    marginBottom: 4
-  }
-
-  const navItemStyle = (isActive) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 16px',
-    borderRadius: 16,
-    fontSize: 15,
-    textDecoration: 'none',
-    color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.78)',
-    background: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
-    borderLeft: isActive ? '4px solid #C9A227' : '4px solid transparent',
-    fontWeight: isActive ? 700 : 500,
-    transition: 'all 0.2s ease',
-  })
-
-  const navItemClick = () => {
-    // On small screens, close sidebar after clicking nav link
-    if (window.innerWidth <= 980 && onClose) {
-      onClose()
-    }
+  const handleNavigate = () => {
+    if (window.innerWidth <= 980) onClose()
   }
 
   return (
-    <aside className={`sidebar ${open ? 'open' : 'closed'}`}>
-      {/* JIMS brand block with Close Button */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingBottom: 18,
-        borderBottom: '1px solid rgba(255,255,255,0.08)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: '#FFFFFF',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 4,
-            boxShadow: '0 0 0 2px rgba(201,162,39,0.3), 0 4px 10px rgba(0,0,0,0.25)',
-            flexShrink: 0,
-            color: '#C9A227',
-            fontWeight: 800,
-            letterSpacing: '0.12em',
-            fontSize: 16
-          }}>
-            J
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: 'white', lineHeight: 1.2 }}>
-              LeaveLink
-            </span>
-            <span style={{ fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
-              JIMS Faculty Portal
-            </span>
-          </div>
-        </div>
-
-        {/* Sidebar Close Button */}
-        {onClose && (
-          <button 
-            onClick={onClose}
-            aria-label="Close sidebar"
-            title="Close sidebar"
-            style={{
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              color: 'rgba(255,255,255,0.8)',
-              borderRadius: 8,
-              width: 32,
-              height: 32,
-              display: 'grid',
-              placeItems: 'center',
-              cursor: 'pointer',
-              fontSize: 14,
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-          >
-            ✕
-          </button>
-        )}
+    <aside className={`sidebar${open ? ' is-open' : ''}${rail ? ' is-rail' : ''}`} aria-label="Main navigation">
+      <div className="sidebar__brand">
+        <span className="sidebar__logo"><img src={logo} alt="JIMS" width="30" height="17" /></span>
+        <span className="sidebar__brand-text">
+          <div className="sidebar__name">LeaveLink</div>
+          <div className="sidebar__tag">JIMS Rohini · Leave Portal</div>
+        </span>
+        <button type="button" className="sidebar__close" onClick={onClose} aria-label="Close menu">
+          <Icon name="close" size={18} />
+        </button>
       </div>
 
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: 14,
-        background: 'rgba(255,255,255,0.06)',
-        borderRadius: 14,
-        border: '1px solid rgba(255,255,255,0.08)'
-      }}>
-        <img 
-          src={user?.profileImage || "https://i.pravatar.cc/80?img=12"} 
-          alt="Profile"
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            border: '2px solid rgba(201,162,39,0.4)',
-            objectFit: 'cover'
-          }}
-        />
-        <div style={{flex: 1, minWidth: 0}}>
-          <div style={{
-            fontWeight: 700, 
-            color: 'white', 
-            fontSize: 15,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            {user?.name || 'User'}
+      <nav className="sidebar__nav">
+        {groups.map((group) => (
+          <div key={group.label} className="sidebar__group">
+            <div className="sidebar__label">{group.label}</div>
+            {group.items.map((item) => {
+              const count = item.badge === 'approvals' ? pendingCount : 0
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={handleNavigate}
+                  className="sidebar__link"
+                  title={rail ? item.label : undefined}
+                  aria-label={rail ? item.label : undefined}
+                >
+                  <Icon name={item.icon} size={19} />
+                  <span className="sidebar__text">{item.label}</span>
+                  {count > 0 && <span className="ui-badge" aria-label={`${count} pending`}>{count}</span>}
+                </NavLink>
+              )
+            })}
           </div>
-          <div style={{
-            fontSize: 13, 
-            color: '#F7D780',
-            marginTop: 2,
-            fontWeight: 600,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            {formatRole(user?.role)}
-          </div>
-        </div>
+        ))}
+      </nav>
+
+      <div className="sidebar__foot">
+        <button type="button" className="sidebar__link sidebar__logout" onClick={onLogout} title={rail ? 'Sign out' : undefined} aria-label={rail ? 'Sign out' : undefined}>
+          <Icon name="logout" size={19} />
+          <span className="sidebar__text">Sign out</span>
+        </button>
       </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={sectionLabelStyle}>Overview</div>
-          <NavLink to={dashboardPath} onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-            <span className="icon" style={{fontSize: 18}}>🏠</span>
-            Dashboard
-          </NavLink>
-          {!isManagement && (
-            <NavLink to="/profile" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-              <span className="icon" style={{fontSize: 18}}>👤</span>
-              Profile
-            </NavLink>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={sectionLabelStyle}>Leave Management</div>
-          {!isManagement && (
-            <>
-              <NavLink to="/leave-request" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-                <span className="icon" style={{fontSize: 18}}>📄</span>
-                Leave Requests
-              </NavLink>
-              <NavLink to="/leave-history" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-                <span className="icon" style={{fontSize: 18}}>📜</span>
-                Self Leave History
-              </NavLink>
-            </>
-          )}
-          {['principal', 'management'].includes(user?.role) && (
-            <NavLink to="/approvals" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-              <span className="icon" style={{fontSize: 18}}>✅</span>
-              Approvals
-            </NavLink>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={sectionLabelStyle}>Institute</div>
-          <NavLink to="/holidays" onClick={navItemClick} style={({isActive}) => navItemStyle(isActive)}>
-            <span className="icon" style={{fontSize: 18}}>📅</span>
-            Holidays
-          </NavLink>
-        </div>
-      </div>
-
-      <button 
-        onClick={handleLogout}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '11px 16px',
-          borderRadius: 14,
-          textDecoration: 'none',
-          color: 'rgba(255,255,255,0.92)',
-          background: 'rgba(220,53,69,0.14)',
-          fontWeight: 700,
-          fontSize: 14,
-          transition: 'all 0.2s ease',
-          border: '1px solid rgba(255,255,255,0.08)',
-          cursor: 'pointer',
-          width: '100%',
-          textAlign: 'left',
-          marginTop: 'auto'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(220,53,69,0.25)'
-          e.currentTarget.style.color = '#ffe3e3'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'rgba(220,53,69,0.14)'
-          e.currentTarget.style.color = 'rgba(255,255,255,0.92)'
-        }}>
-        <span className="icon" style={{fontSize: 18}}>⏻</span>
-        Logout
-      </button>
     </aside>
   )
 }

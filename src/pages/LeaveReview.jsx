@@ -1,8 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveById, approveLeave, rejectLeave } from '../utils/api-auth'
+import { upsertLeave, useLeaves } from '../utils/leavesStore'
 import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatDate } from '../utils/dates'
+import { useFeedback } from '../components/ui/Feedback'
+import { AlsoAway, LeaveTimeline } from '../components/LeaveDetails'
+import { Avatar, Card, EmptyState, Icon, Notice, PageHeader, Skeleton, Spinner, StatusChip } from '../components/ui'
 
 const APPROVER_ROLE = {
   faculty: 'principal',
@@ -19,42 +24,21 @@ const ROLE_NAMES = {
   management: 'Management'
 }
 
-const STATUS_STYLES = {
-  Pending: { background: '#fef3c7', color: '#92400e' },
-  Approved: { background: '#dcfce7', color: '#166534' },
-  Rejected: { background: '#fee2e2', color: '#991b1b' },
-  Cancelled: { background: '#f3f4f6', color: '#4b5563' }
-}
-
-const formatDate = (value) => {
-  if (!value) return '-'
-  const hasZone = /[zZ]|[+-]\d{2}:\d{2}$/.test(value)
-  const parsed = new Date(value.length > 10 && !hasZone ? `${value}Z` : value)
-  if (Number.isNaN(parsed.getTime())) return '-'
-  return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-const buttonStyle = (background) => ({
-  padding: '11px 20px',
-  background,
-  color: '#fff',
-  border: 'none',
-  borderRadius: 8,
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer'
-})
-
 export default function LeaveReview() {
   const { leaveId } = useParams()
   const { user } = useAuth()
+  const { confirm, toast } = useFeedback()
+  const isApprover = user?.role === 'principal' || user?.role === 'management'
+  const { leaves } = useLeaves({ enabled: isApprover })
   const [leave, setLeave] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [processing, setProcessing] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
   const [notice, setNotice] = useState('')
+  const reasonRef = useRef(null)
 
   useEffect(() => {
     let active = true
@@ -67,18 +51,31 @@ export default function LeaveReview() {
     return () => { active = false }
   }, [leaveId])
 
-  if (loading) return <div style={{ padding: 24 }}>Loading leave request...</div>
+  useEffect(() => {
+    if (rejecting) reasonRef.current?.focus()
+  }, [rejecting])
 
-  const backPath = user?.role === 'principal' || user?.role === 'management' ? '/approvals' : '/dashboard'
+  const backPath = isApprover ? '/approvals' : '/dashboard'
+
+  if (loading) {
+    return (
+      <div className="ui-page" aria-busy="true">
+        <span className="sr-only">Loading leave request...</span>
+        <Skeleton width={90} height={14} style={{ marginBottom: 18 }} />
+        <Skeleton width={280} height={30} style={{ marginBottom: 24 }} />
+        <Skeleton height={380} radius={14} />
+      </div>
+    )
+  }
 
   if (error || !leave) {
     return (
-      <div style={{ padding: 24 }}>
-        <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 640 }}>
-          <h2 style={{ marginTop: 0 }}>Leave request unavailable</h2>
-          <p style={{ color: '#6b7280' }}>{error || 'This leave request could not be found.'}</p>
-          <Link to={backPath} style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>Go back</Link>
-        </div>
+      <div className="ui-page" style={{ maxWidth: 680 }}>
+        <Card>
+          <EmptyState icon="alert" title="Leave request unavailable" action={<Link to={backPath} className="ui-btn ui-btn--secondary ui-btn--sm"><Icon name="arrowLeft" size={15} />Go back</Link>}>
+            {error || 'This leave request could not be found.'}
+          </EmptyState>
+        </Card>
       </div>
     )
   }
@@ -88,26 +85,42 @@ export default function LeaveReview() {
   const canDecide = leave.status === 'Pending' && !!approverRole && user?.role === approverRole && leave.user?.id !== user?.id
 
   const handleApprove = async () => {
-    if (!window.confirm('Approve this leave request?')) return
+    const ok = await confirm({
+      title: `Approve leave for ${leave.user?.name || 'this staff member'}?`,
+      message: `${leave.leaveType} · ${formatDate(leave.startDate)} to ${formatDate(leave.endDate)} · ${formatLeaveDays(leave)}. They will be notified by email.`,
+      confirmLabel: 'Approve',
+      tone: 'success',
+      icon: 'checkCircle',
+    })
+    if (!ok) return
     setProcessing(true)
     try {
-      setLeave(await approveLeave(leave.id))
+      const updated = await approveLeave(leave.id)
+      setLeave(updated)
+      upsertLeave(updated)
       setNotice('Leave request approved.')
     } catch (err) {
-      alert('Approve failed: ' + (err.message || 'Unknown error'))
+      toast(`Couldn't approve the request: ${err.message || 'please try again.'}`, 'error')
     } finally {
       setProcessing(false)
     }
   }
 
   const handleReject = async () => {
+    if (!rejectionReason.trim()) {
+      setReasonError('Please give a reason so the staff member knows why.')
+      reasonRef.current?.focus()
+      return
+    }
     setProcessing(true)
     try {
-      setLeave(await rejectLeave(leave.id, rejectionReason.trim()))
+      const updated = await rejectLeave(leave.id, rejectionReason.trim())
+      setLeave(updated)
+      upsertLeave(updated)
       setRejecting(false)
       setNotice('Leave request rejected.')
     } catch (err) {
-      alert('Reject failed: ' + (err.message || 'Unknown error'))
+      toast(`Couldn't reject the request: ${err.message || 'please try again.'}`, 'error')
     } finally {
       setProcessing(false)
     }
@@ -130,95 +143,111 @@ export default function LeaveReview() {
     details.push(['Decision Date', formatDate(leave.actionDate)])
   }
 
-  const statusStyle = STATUS_STYLES[leave.status] || STATUS_STYLES.Cancelled
-
   return (
-    <div style={{ padding: 24 }}>
-      <style>{`
-        @media (max-width: 600px) {
-          .leave-review-card { padding: 18px !important; }
-          .leave-review-actions button { flex: 1 1 100%; }
-        }
-      `}</style>
+    <div className="ui-page" style={{ maxWidth: 1100 }}>
+      <Link to={backPath} className="ui-link" style={{ fontSize: 14, marginBottom: 14, display: 'inline-flex' }}><Icon name="arrowLeft" size={15} />Back</Link>
+      <PageHeader
+        eyebrow={`Request #${leave.id}`}
+        title="Leave Request Details"
+        actions={<span style={{ transform: 'scale(1.1)', transformOrigin: 'right center' }}><StatusChip status={leave.status} /></span>}
+      />
 
-      <Link to={backPath} style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none', fontSize: 14 }}>&larr; Back</Link>
+      {notice && <Notice tone="success" style={{ marginBottom: 18 }}>{notice}</Notice>}
 
-      <div className="leave-review-card" style={{ background: '#fff', borderRadius: 12, padding: 28, marginTop: 14, maxWidth: 900, boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Leave Request Details</h2>
-            <div style={{ color: '#6b7280', fontSize: 14, marginTop: 4 }}>Request #{leave.id}</div>
-          </div>
-          <span style={{ ...statusStyle, padding: '6px 14px', borderRadius: 999, fontWeight: 700, fontSize: 14 }}>{leave.status}</span>
-        </div>
-
-        {notice && (
-          <div role="status" style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 8, padding: '10px 14px', marginBottom: 18, fontSize: 14 }}>
-            {notice}
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 16 }}>
-          {details.map(([label, value]) => (
-            <div key={label} style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', overflowWrap: 'anywhere' }}>{value}</div>
+      <div className="ui-grid ui-grid--main">
+        <Card noBody className="leave-review-card">
+          <div className="review-person">
+            <Avatar name={leave.user?.name} size={48} />
+            <div style={{ minWidth: 0 }}>
+              <div className="ui-cell-main" style={{ fontSize: 17 }}>{leave.user?.name || '-'}</div>
+              <div className="ui-cell-sub">{[ROLE_NAMES[requesterRole], leave.user?.department].filter(Boolean).join(' · ')}</div>
             </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>Reason for Leave</div>
-          <div style={{ fontSize: 15, color: '#111827', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{leave.reason || '-'}</div>
-        </div>
-
-        {leave.status === 'Rejected' && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>Rejection Reason</div>
-            <div style={{ fontSize: 15, color: '#991b1b', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{leave.rejectionReason || 'No reason given'}</div>
           </div>
-        )}
-
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>Document</div>
-          {leave.attachment ? (
-            <a href={leave.attachment} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>View Document</a>
-          ) : (
-            <span style={{ color: '#6b7280' }}>None</span>
-          )}
-        </div>
-
-        {canDecide && (
-          <div style={{ marginTop: 26, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
-            {rejecting ? (
-              <div>
-                <label htmlFor="rejection-reason" style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Rejection reason (optional)</label>
-                <textarea
-                  id="rejection-reason"
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  rows={3}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: 10, border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }}
-                />
-                <div className="leave-review-actions" style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-                  <button type="button" disabled={processing} onClick={handleReject} style={{ ...buttonStyle('#ef4444'), opacity: processing ? 0.6 : 1 }}>Confirm Rejection</button>
-                  <button type="button" disabled={processing} onClick={() => setRejecting(false)} style={{ ...buttonStyle('#6b7280'), opacity: processing ? 0.6 : 1 }}>Cancel</button>
+          <div className="ui-card__body">
+            <div className="review-grid">
+              {details.map(([label, value]) => (
+                <div key={label} style={{ minWidth: 0 }}>
+                  <div className="leave-detail-grid__label">{label}</div>
+                  <div className="leave-detail-grid__value">{value}</div>
                 </div>
-              </div>
-            ) : (
-              <div className="leave-review-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button type="button" disabled={processing} onClick={handleApprove} style={{ ...buttonStyle('#10b981'), opacity: processing ? 0.6 : 1 }}>Approve</button>
-                <button type="button" disabled={processing} onClick={() => setRejecting(true)} style={{ ...buttonStyle('#ef4444'), opacity: processing ? 0.6 : 1 }}>Reject</button>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <div className="leave-detail-grid__label">Reason for Leave</div>
+              <div className="leave-detail-grid__value" style={{ fontWeight: 400, whiteSpace: 'pre-wrap' }}>{leave.reason || '-'}</div>
+            </div>
+
+            {leave.status === 'Rejected' && (
+              <div className="ui-notice ui-notice--danger" style={{ marginTop: 16, display: 'block' }}>
+                <div className="leave-detail-grid__label" style={{ color: 'inherit' }}>Rejection Reason</div>
+                <div style={{ marginTop: 4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{leave.rejectionReason || 'No reason given'}</div>
               </div>
             )}
-          </div>
-        )}
 
-        {leave.status === 'Pending' && !canDecide && approverRole && (
-          <div style={{ marginTop: 22, color: '#6b7280', fontSize: 14 }}>
-            This request is waiting for approval by the {ROLE_NAMES[approverRole]}.
+            <div style={{ marginTop: 16 }}>
+              <div className="leave-detail-grid__label">Document</div>
+              <div style={{ marginTop: 4 }}>
+                {leave.attachment
+                  ? <a className="ui-link" href={leave.attachment} target="_blank" rel="noreferrer"><Icon name="paperclip" size={15} />View Document</a>
+                  : <span className="muted">None</span>}
+              </div>
+            </div>
+
+            {canDecide && (
+              <div className="review-actions">
+                {rejecting ? (
+                  <div>
+                    <label className="ui-label" htmlFor="rejection-reason">Rejection reason</label>
+                    <textarea
+                      ref={reasonRef}
+                      id="rejection-reason"
+                      value={rejectionReason}
+                      onChange={(e) => { setRejectionReason(e.target.value); setReasonError('') }}
+                      rows={3}
+                      maxLength={500}
+                      placeholder="e.g. Mid-semester examinations are scheduled that week"
+                      aria-invalid={reasonError ? 'true' : undefined}
+                    />
+                    {reasonError ? <div className="ui-error">{reasonError}</div> : <div className="ui-hint">The reason is included in the email sent to the staff member.</div>}
+                    <div className="leave-review-actions">
+                      <button type="button" className="ui-btn ui-btn--danger-solid" disabled={processing} onClick={handleReject}>
+                        {processing ? <Spinner /> : <Icon name="x" size={16} />}Confirm Rejection
+                      </button>
+                      <button type="button" className="ui-btn ui-btn--secondary" disabled={processing} onClick={() => { setRejecting(false); setReasonError('') }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="leave-review-actions">
+                    <button type="button" className="ui-btn ui-btn--success" disabled={processing} onClick={handleApprove}>
+                      {processing ? <Spinner /> : <Icon name="check" size={16} />}Approve
+                    </button>
+                    <button type="button" className="ui-btn ui-btn--danger" disabled={processing} onClick={() => setRejecting(true)}>
+                      <Icon name="x" size={16} />Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {leave.status === 'Pending' && !canDecide && approverRole && (
+              <Notice tone="warning" icon="clock" style={{ marginTop: 22 }}>
+                This request is waiting for approval by the {ROLE_NAMES[approverRole]}.
+              </Notice>
+            )}
           </div>
-        )}
+        </Card>
+
+        <div className="ui-stack">
+          <Card title="Status history" icon="clock">
+            <LeaveTimeline leave={leave} />
+          </Card>
+          {isApprover && leave.status === 'Pending' && (
+            <Card>
+              <AlsoAway leave={leave} leaves={leaves} />
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   )
