@@ -1,12 +1,56 @@
-from flask import Blueprint, request, jsonify
+from datetime import datetime, timedelta, timezone
+import hashlib
+import re
+
+import jwt as pyjwt
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.user import User
 from extensions import db
 from utils.jwt_helpers import create_user_token
+from utils.notifications import notify_password_reset
 from sqlalchemy.exc import IntegrityError
-import re
 
 auth_bp = Blueprint('auth', __name__)
+
+RESET_MINUTES = 30
+RESET_PURPOSE = 'password_reset'
+
+
+def _reset_key():
+    # Separate from the login-token key, so a reset link can never be used as a session token
+    return current_app.config['JWT_SECRET_KEY'] + ':password-reset'
+
+
+def _password_fingerprint(user):
+    # Changes whenever the password changes, which makes each reset link single-use
+    return hashlib.sha256(user.password_hash.encode()).hexdigest()[:24]
+
+
+def create_reset_token(user):
+    now = datetime.now(timezone.utc)
+    payload = {
+        'sub': str(user.id),
+        'purpose': RESET_PURPOSE,
+        'pwd': _password_fingerprint(user),
+        'iat': now,
+        'exp': now + timedelta(minutes=RESET_MINUTES),
+    }
+    return pyjwt.encode(payload, _reset_key(), algorithm='HS256')
+
+
+def user_from_reset_token(token):
+    """Returns the user for a valid, unused, unexpired reset token, otherwise None."""
+    try:
+        payload = pyjwt.decode(token, _reset_key(), algorithms=['HS256'])
+    except pyjwt.PyJWTError:
+        return None
+    if payload.get('purpose') != RESET_PURPOSE:
+        return None
+    user = safe_db_exec(lambda: User.query.get(int(payload.get('sub', 0))))
+    if not user or user.is_active is False or payload.get('pwd') != _password_fingerprint(user):
+        return None
+    return user
 
 def validate_email(email):
     """Validate email format"""
@@ -268,6 +312,69 @@ def refresh_token():
     if not user:
         return jsonify({'success': False, 'message': 'User not found', 'authError': True}), 401
     return jsonify({'success': True, 'token': create_user_token(user)}), 200
+
+# @route   POST /api/auth/forgot-password
+# @desc    Email a password reset link (same reply whether or not the account exists)
+# @access  Public
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    if not email or not validate_email(email):
+        return jsonify({'success': False, 'message': 'Enter a valid email address.'}), 400
+
+    reply = jsonify({
+        'success': True,
+        'message': f'If an account exists for {email}, a password reset link has been sent to it. '
+                   f'The link expires in {RESET_MINUTES} minutes.',
+    })
+    try:
+        user = safe_db_exec(lambda: User.query.filter_by(email=email).first())
+        if user and user.is_active is not False:
+            notify_password_reset(user, create_reset_token(user), RESET_MINUTES)
+            print(f'[AUTH] Password reset requested for user ID {user.id}')
+    except Exception as e:
+        db.session.rollback()
+        print(f'Forgot password error: {e}')
+        return jsonify({'success': False, 'message': 'Could not send the reset email. Please try again.'}), 500
+    return reply, 200
+
+
+# @route   POST /api/auth/reset-password/verify
+# @desc    Check a reset link before showing the new-password form
+# @access  Public
+@auth_bp.route('/reset-password/verify', methods=['POST'])
+def verify_reset_token():
+    data = request.get_json(silent=True) or {}
+    user = user_from_reset_token(data.get('token') or '')
+    if not user:
+        return jsonify({'success': False, 'message': 'This reset link is invalid, has expired, or was already used.'}), 400
+    return jsonify({'success': True, 'email': user.email}), 200
+
+
+# @route   POST /api/auth/reset-password
+# @desc    Set a new password using a reset link
+# @access  Public
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password') or ''
+    if len(password) < 6:
+        return jsonify({'success': False, 'message': 'Password must be at least 6 characters'}), 400
+
+    user = user_from_reset_token(data.get('token') or '')
+    if not user:
+        return jsonify({'success': False, 'message': 'This reset link is invalid, has expired, or was already used.'}), 400
+    try:
+        user.set_password(password)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f'Reset password error: {e}')
+        return jsonify({'success': False, 'message': 'Could not update the password. Please try again.'}), 500
+    print(f'[AUTH] Password reset completed for user ID {user.id}')
+    return jsonify({'success': True, 'message': 'Your password has been changed. You can now sign in.', 'role': user.role}), 200
+
 
 # @route   POST /api/auth/change-password
 # @desc    Change user password

@@ -112,6 +112,31 @@ export const registerUser = async (userData) => {
   }
 }
 
+const publicPost = async (endpoint, body, fallbackMessage) => {
+  let response
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+  } catch {
+    throw new Error('Cannot connect to server. Ensure the backend is reachable.')
+  }
+  const data = await safeParseJson(response)
+  if (!data.success) throw new Error(data.message || fallbackMessage)
+  return data
+}
+
+export const requestPasswordReset = (email) =>
+  publicPost('/auth/forgot-password', { email }, 'Could not send the reset email. Please try again.')
+
+export const verifyResetToken = (token) =>
+  publicPost('/auth/reset-password/verify', { token }, 'This reset link is invalid or has expired.')
+
+export const resetPassword = (token, password) =>
+  publicPost('/auth/reset-password', { token, password }, 'Could not change the password. Please try again.')
+
 // Get current user from API (always fetch from database, never cached).
 // Returns null when the token is rejected; throws on network/server errors
 // so a temporary outage doesn't log the user out.

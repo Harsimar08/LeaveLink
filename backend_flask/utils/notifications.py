@@ -104,11 +104,14 @@ def _leave_rows(leave, include_decision=False):
     return rows
 
 
-def _build_email(to_address, subject, greeting, intro, rows, action_url=None):
+def _build_email(to_address, subject, greeting, intro, rows, action_url=None,
+                 action_label=ACTION_LABEL, action_note='You will be asked to sign in before the request opens.'):
     text_lines = [greeting, '', intro, '']
     text_lines += [f'{label}: {value}' for label, value in rows]
     if action_url:
-        text_lines += ['', f'{ACTION_LABEL}:', action_url]
+        text_lines += ['', f'{action_label}:', action_url]
+        if action_note:
+            text_lines += [action_note]
     text_lines += ['', '— LeaveLink, Jagan Institute of Management Studies']
 
     row_html = ''.join(
@@ -122,10 +125,11 @@ def _build_email(to_address, subject, greeting, intro, rows, action_url=None):
     button_html = (
         f'<p style="margin:24px 0 8px"><a href="{escape(action_url)}" '
         'style="display:inline-block;background:#0e1a2e;color:#ffffff;text-decoration:none;font-weight:700;'
-        f'font-size:15px;padding:12px 22px;border-radius:8px">{escape(ACTION_LABEL)}</a></p>'
-        '<p style="margin:0;color:#94a0b3;font-size:12px">You will be asked to sign in before the request opens.</p>'
+        f'font-size:15px;padding:12px 22px;border-radius:8px">{escape(action_label)}</a></p>'
+        + (f'<p style="margin:0;color:#94a0b3;font-size:12px">{escape(action_note)}</p>' if action_note else '')
         if action_url else ''
     )
+    table_html = f'<table style="width:100%;border-collapse:collapse">{row_html}</table>' if rows else ''
     html_body = (
         '<div style="background:#f6f7f9;padding:24px;font-family:Arial,Helvetica,sans-serif">'
         '<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e6e9ef">'
@@ -133,7 +137,7 @@ def _build_email(to_address, subject, greeting, intro, rows, action_url=None):
         '<div style="padding:24px">'
         f'<p style="margin:0 0 12px;color:#101826;font-size:15px">{escape(greeting)}</p>'
         f'<p style="margin:0 0 18px;color:#101826;font-size:15px;line-height:1.5">{escape(intro)}</p>'
-        f'<table style="width:100%;border-collapse:collapse">{row_html}</table>'
+        f'{table_html}'
         f'{button_html}'
         '</div>'
         '<div style="padding:14px 24px;background:#f6f7f9;color:#94a0b3;font-size:12px">'
@@ -222,6 +226,34 @@ def notify_leave_submitted(leave):
         return _send(messages)
     except Exception as e:
         print(f'[MAIL] Leave submission notification failed: {e}')
+        return 0
+
+
+def password_reset_link(token):
+    return f'{_app_url()}/reset-password?token={quote(token, safe="")}'
+
+
+def notify_password_reset(user, token, minutes):
+    """Email a one-time link for choosing a new password."""
+    try:
+        link = password_reset_link(token)
+        if not _mail_settings() and not os.getenv('VERCEL'):
+            print(f'[MAIL] SMTP is not configured; password reset link for {user.email}: {link}')
+            return 0
+        message = _build_email(
+            user.email,
+            'Reset your LeaveLink password',
+            f'Dear {user.name},',
+            f'We received a request to reset the password for your LeaveLink account. '
+            f'Use the button below to choose a new password. The link works once and expires in {minutes} minutes.',
+            [],
+            action_url=link,
+            action_label='Reset Password',
+            action_note='If you did not ask for this, you can ignore this email; your password will not change.',
+        )
+        return _send([message])
+    except Exception as e:
+        print(f'[MAIL] Password reset email failed: {e}')
         return 0
 
 

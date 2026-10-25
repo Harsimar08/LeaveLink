@@ -15,6 +15,8 @@ import logo from './assets/jims-logo.jpg'
 const Login = lazy(() => import('./pages/Login'))
 const Signup = lazy(() => import('./pages/Signup'))
 const AuthCallback = lazy(() => import('./pages/AuthCallback'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Profile = lazy(() => import('./pages/Profile'))
 const LeaveRequest = lazy(() => import('./pages/LeaveRequest'))
@@ -160,6 +162,15 @@ function Shell() {
 
 export default function App() {
   const { isAuthenticated, loading } = useAuth()
+  const location = useLocation()
+
+  if (location.pathname === '/reset-password') {
+    return (
+      <Suspense fallback={<BootScreen />}>
+        <ResetPassword />
+      </Suspense>
+    )
+  }
 
   if (loading) return <BootScreen />
 
@@ -169,6 +180,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<RedirectToLogin />} />
         </Routes>

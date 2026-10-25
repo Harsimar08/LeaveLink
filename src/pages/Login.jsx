@@ -132,7 +132,10 @@ export default function Login() {
             </div>
 
             <div className="ui-field" style={{ marginBottom: 8 }}>
-              <label className="ui-label" htmlFor="login-password">Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                <label className="ui-label" htmlFor="login-password">Password</label>
+                <Link to="/forgot-password" className="ui-link" style={{ fontSize: 13.5, fontWeight: 600 }}>Forgot password?</Link>
+              </div>
               <div className="auth-input">
                 <Icon name="lock" size={17} />
                 <input
