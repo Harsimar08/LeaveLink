@@ -9,6 +9,7 @@ from models.user import User
 from extensions import db
 from utils.jwt_helpers import create_user_token
 from utils.notifications import notify_password_reset
+from utils.departments import DEPARTMENTS, DEPARTMENT_ROLES, coordinator_map, normalize_departments
 from sqlalchemy.exc import IntegrityError
 
 auth_bp = Blueprint('auth', __name__)
@@ -129,7 +130,12 @@ def register():
         
         # Clean employee_id and department
         raw_emp_id = (data.get('employeeId') or '').strip()
-        raw_dept = (data.get('department') or '').strip()
+        if data['role'] in DEPARTMENT_ROLES:
+            raw_dept, dept_error = normalize_departments(data.get('departments') or data.get('department'))
+            if dept_error:
+                return jsonify({'success': False, 'message': dept_error}), 400
+        else:
+            raw_dept = (data.get('department') or '').strip()
         
         # Create new user
         user = User(
@@ -184,6 +190,21 @@ def register():
             'success': False,
             'message': f'Server error during registration: {error_str}'
         }), 500
+
+# @route   GET /api/auth/departments
+# @desc    Departments and the Coordinator(s) of each, for the sign-up form
+# @access  Public
+@auth_bp.route('/departments', methods=['GET'])
+def list_departments():
+    try:
+        mapping = safe_db_exec(coordinator_map)
+    except Exception as e:
+        print(f'List departments error: {e}')
+        mapping = {}
+    return jsonify({
+        'success': True,
+        'departments': [{'name': d, 'coordinators': mapping.get(d, [])} for d in DEPARTMENTS],
+    }), 200
 
 # @route   POST /api/auth/login
 # @desc    Login user

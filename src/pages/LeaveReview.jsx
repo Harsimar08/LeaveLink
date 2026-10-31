@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { getLeaveById, approveLeave, rejectLeave } from '../utils/api-auth'
 import { upsertLeave, useLeaves } from '../utils/leavesStore'
-import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatLeaveDays, formatOdTime } from '../utils/leaveFormat'
 import { formatDate } from '../utils/dates'
 import { useFeedback } from '../components/ui/Feedback'
 import { AlsoAway, LeaveTimeline } from '../components/LeaveDetails'
@@ -138,6 +138,7 @@ export default function LeaveReview() {
     ['Number of Leave Days', formatLeaveDays(leave)],
     ['Half Day / Full Day', leave.isHalfDay ? 'Half Day' : 'Full Day']
   ]
+  if (formatOdTime(leave)) details.push(['OD Time', formatOdTime(leave)])
   if (leave.status === 'Approved' || leave.status === 'Rejected') {
     details.push([leave.status === 'Approved' ? 'Approved By' : 'Rejected By', leave.approverName || '-'])
     details.push(['Decision Date', formatDate(leave.actionDate)])

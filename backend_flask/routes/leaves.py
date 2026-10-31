@@ -16,6 +16,43 @@ def parse_bool(value):
         return value.strip().lower() in ('true', '1', 'yes', 'on')
     return bool(value)
 
+
+OD_LEAVE_TYPES = ('on duty leave', 'on duty', 'od', 'duty leave')
+
+
+def is_od_leave(leave_type):
+    return (leave_type or '').strip().lower() in OD_LEAVE_TYPES
+
+
+def _parse_time(value):
+    try:
+        return datetime.strptime((value or '').strip(), '%H:%M').strftime('%H:%M')
+    except ValueError:
+        return None
+
+
+def od_times(leave_type, data, current=(None, None)):
+    """Returns ((start, end), error). OD leave needs a From and To time; other types never keep one."""
+    if not is_od_leave(leave_type):
+        return (None, None), None
+    start = _parse_time(data['odStartTime']) if 'odStartTime' in data else current[0]
+    end = _parse_time(data['odEndTime']) if 'odEndTime' in data else current[1]
+    if not start or not end:
+        return None, 'Select the From and To time for On Duty leave (HH:MM).'
+    if end <= start:
+        return None, 'The OD To time must be later than the From time.'
+    return (start, end), None
+
+
+def management_decision_error(user_role, leave):
+    """Management decides only on the Principal's leave; it can view everyone else's but not decide."""
+    if user_role == 'management' and (not leave.user or leave.user.role != 'principal'):
+        return jsonify({
+            'success': False,
+            'message': 'Management can only approve or reject the Principal\u2019s leave requests.'
+        }), 403
+    return None
+
 # @route   POST /api/leaves
 # @desc    Create a new leave request
 # @access  Private
@@ -82,6 +119,11 @@ def create_leave():
                     'message': 'numberOfDays must be a number'
                 }), 400
         
+        times, od_error = od_times(data['leaveType'], data)
+        if od_error:
+            return jsonify({'success': False, 'message': od_error}), 400
+        od_start, od_end = times
+
         attachment_url = None
         if file and file.filename:
             file_data = file.read()
@@ -106,6 +148,8 @@ def create_leave():
             end_date=end_date,
             number_of_days=number_of_days,
             is_half_day=is_half_day,
+            od_start_time=od_start,
+            od_end_time=od_end,
             reason=data['reason'].strip(),
             attachment=attachment_url
         )
@@ -272,6 +316,12 @@ def update_leave(leave_id):
             data = request.get_json() or {}
             file = None
         
+        new_type = data.get('leaveType') or leave.leave_type
+        times, od_error = od_times(new_type, data, (leave.od_start_time, leave.od_end_time))
+        if od_error:
+            return jsonify({'success': False, 'message': od_error}), 400
+        leave.od_start_time, leave.od_end_time = times
+
         # Update allowed fields
         if 'leaveType' in data:
             leave.leave_type = data['leaveType']
@@ -432,6 +482,10 @@ def approve_leave(leave_id):
                 'message': 'Leave request not found'
             }), 404
         
+        denied = management_decision_error(user_role, leave)
+        if denied:
+            return denied
+
         if leave.status != 'Pending':
             return jsonify({
                 'success': False,
@@ -502,6 +556,10 @@ def reject_leave(leave_id):
                 'message': 'Leave request not found'
             }), 404
         
+        denied = management_decision_error(user_role, leave)
+        if denied:
+            return denied
+
         if leave.status != 'Pending':
             return jsonify({
                 'success': False,

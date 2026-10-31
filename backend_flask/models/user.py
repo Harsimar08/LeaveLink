@@ -55,6 +55,9 @@ class User(db.Model):
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None
         }
+        from utils.departments import coordinators_for, split_departments
+        data['departments'] = split_departments(self.department)
+        data['coordinators'] = coordinators_for(self)
         if include_password:
             data['password'] = self.password_hash
         return data

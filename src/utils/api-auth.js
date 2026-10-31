@@ -128,6 +128,18 @@ const publicPost = async (endpoint, body, fallbackMessage) => {
   return data
 }
 
+// { MCA: ['Mr. A'], BCA: [] } — Coordinators by department (public, used at signup)
+export const getDepartmentCoordinators = async () => {
+  let response
+  try {
+    response = await fetch(`${API_URL}/auth/departments`, { cache: 'no-store' })
+  } catch {
+    throw new Error('Cannot connect to server. Ensure the backend is reachable.')
+  }
+  const data = await safeParseJson(response)
+  return Object.fromEntries((data.departments || []).map((d) => [d.name, d.coordinators || []]))
+}
+
 export const requestPasswordReset = (email) =>
   publicPost('/auth/forgot-password', { email }, 'Could not send the reset email. Please try again.')
 

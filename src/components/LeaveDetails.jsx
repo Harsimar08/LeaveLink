@@ -1,8 +1,9 @@
 import React from 'react'
 import { Avatar, StatusChip, Icon } from './ui'
 import { formatDate, formatDateTime, formatRange, rangesOverlap } from '../utils/dates'
-import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatLeaveDays, formatOdTime } from '../utils/leaveFormat'
 import { formatRole } from '../utils/roles'
+import { sharesDepartment } from '../utils/departments'
 
 export const approverLabelFor = (leave) => (leave.user?.role === 'principal' ? 'Management' : 'Principal')
 
@@ -23,6 +24,12 @@ export function LeaveDetailsList({ leave, showApplicant = true }) {
       <dd>{formatRange(leave.startDate, leave.endDate)}</dd>
       <dt>Duration</dt>
       <dd>{formatLeaveDays(leave)}</dd>
+      {formatOdTime(leave) && (
+        <>
+          <dt>OD time</dt>
+          <dd>{formatOdTime(leave)}</dd>
+        </>
+      )}
       <dt>Status</dt>
       <dd><StatusChip status={leave.status} /></dd>
       <dt>Reason</dt>
@@ -71,7 +78,7 @@ export const overlappingLeaves = (leave, leaves) => {
     other.id !== leave.id &&
     (other.user?.id ?? other.userId) !== applicantId &&
     (other.status === 'Approved' || other.status === 'Pending') &&
-    (!dept || other.user?.department === dept) &&
+    (!dept || sharesDepartment(dept, other.user?.department)) &&
     rangesOverlap(leave.startDate, leave.endDate, other.startDate, other.endDate)
   )
 }

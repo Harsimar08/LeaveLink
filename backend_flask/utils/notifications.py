@@ -83,6 +83,14 @@ def _format_days(days):
     return str(int(days)) if days.is_integer() else f'{days:g}'
 
 
+def _format_time(value):
+    try:
+        hour, minute = (int(part) for part in value.split(':'))
+    except (AttributeError, ValueError):
+        return value or '-'
+    return f'{(hour % 12) or 12}:{minute:02d} {"AM" if hour < 12 else "PM"}'
+
+
 def _leave_rows(leave, include_decision=False):
     requester = leave.user
     rows = [
@@ -94,6 +102,10 @@ def _leave_rows(leave, include_decision=False):
         ('End Date', _format_date(leave.end_date)),
         ('Number of Leave Days', _format_days(leave.number_of_days)),
         ('Half Day / Full Day', 'Half Day' if leave.is_half_day else 'Full Day'),
+    ]
+    if leave.od_start_time and leave.od_end_time:
+        rows.append(('OD Time', f'{_format_time(leave.od_start_time)} – {_format_time(leave.od_end_time)}'))
+    rows += [
         ('Reason for Leave', leave.reason),
         ('Status', leave.status),
     ]

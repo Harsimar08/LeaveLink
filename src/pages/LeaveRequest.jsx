@@ -9,7 +9,7 @@ import { Dialog } from '../components/ui/Dialog'
 import { Card, Icon, Notice, PageHeader, Skeleton, Spinner, StatusChip } from '../components/ui'
 import useUnsavedWarning from '../utils/useUnsavedWarning'
 import { WEEKDAYS, formatDate, formatRange, parseDay, todayISO } from '../utils/dates'
-import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatLeaveDays, formatOdTime } from '../utils/leaveFormat'
 
 const leaveTypeLabels = {
   CL: 'Casual Leave',
@@ -33,7 +33,7 @@ const UPDATE_SUCCESS_MESSAGE = 'Your leave request has been updated successfully
 const MAX_REASON = 500
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
-const emptyForm = { leaveType: '', reason: '', startDate: '', endDate: '', halfDay: false, emergencyContact: '', attachments: null }
+const emptyForm = { leaveType: '', reason: '', startDate: '', endDate: '', halfDay: false, odStartTime: '', odEndTime: '', emergencyContact: '', attachments: null }
 
 const formFromRequest = (request) => ({
   leaveType: leaveTypeIdFor(request.leaveType),
@@ -41,6 +41,8 @@ const formFromRequest = (request) => ({
   startDate: (request.startDate || '').slice(0, 10),
   endDate: (request.endDate || request.startDate || '').slice(0, 10),
   halfDay: !!request.isHalfDay,
+  odStartTime: request.odStartTime || '',
+  odEndTime: request.odEndTime || '',
   emergencyContact: '',
   attachments: null,
 })
@@ -48,6 +50,7 @@ const formFromRequest = (request) => ({
 const sameForm = (a, b) =>
   a.leaveType === b.leaveType && a.reason === b.reason && a.startDate === b.startDate &&
   a.endDate === b.endDate && a.halfDay === b.halfDay && a.emergencyContact === b.emergencyContact &&
+  a.odStartTime === b.odStartTime && a.odEndTime === b.odEndTime &&
   !a.attachments && !b.attachments
 
 const weekdayOf = (iso) => {
@@ -87,6 +90,8 @@ export default function LeaveRequest() {
   }, [formData.startDate, formData.endDate, formData.halfDay])
 
   const durationLabel = formData.halfDay ? '0.5 day (Half day)' : `${calculatedDays} ${calculatedDays === 1 ? 'day' : 'days'}`
+  const isOD = formData.leaveType === 'OD'
+  const odTimeLabel = isOD ? formatOdTime(formData) : ''
   const baseline = editingRequest ? formFromRequest(editingRequest) : emptyForm
   const dirty = !sameForm(formData, baseline)
   const datesValid = formData.startDate && formData.endDate && formData.endDate >= formData.startDate
@@ -142,6 +147,13 @@ export default function LeaveRequest() {
     if (!formData.endDate) newErrors.endDate = 'Please select end date'
     if (formData.startDate && formData.endDate && formData.endDate < formData.startDate) {
       newErrors.endDate = 'End date must be after start date'
+    }
+    if (formData.leaveType === 'OD') {
+      if (!formData.odStartTime) newErrors.odStartTime = 'Please select the From time'
+      if (!formData.odEndTime) newErrors.odEndTime = 'Please select the To time'
+      if (formData.odStartTime && formData.odEndTime && formData.odEndTime <= formData.odStartTime) {
+        newErrors.odEndTime = 'To time must be later than From time'
+      }
     }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -216,6 +228,10 @@ export default function LeaveRequest() {
         form.append('endDate', endDate)
         form.append('numberOfDays', calculatedDays)
         form.append('halfDay', formData.halfDay ? 'true' : 'false')
+        if (isOD) {
+          form.append('odStartTime', formData.odStartTime)
+          form.append('odEndTime', formData.odEndTime)
+        }
         form.append('attachment', formData.attachments)
         leaveRequestData = form
       } else {
@@ -226,6 +242,7 @@ export default function LeaveRequest() {
           endDate,
           numberOfDays: calculatedDays,
           halfDay: formData.halfDay,
+          ...(isOD ? { odStartTime: formData.odStartTime, odEndTime: formData.odEndTime } : {}),
           attachment: null,
         }
       }
@@ -312,6 +329,20 @@ export default function LeaveRequest() {
                 {errors.endDate ? <div className="ui-error">{errors.endDate}</div> : <div className="ui-hint">{formData.halfDay ? 'Same day for a half-day leave' : weekdayOf(formData.endDate) || 'Last day of leave'}</div>}
               </div>
             </div>
+            {isOD && (
+              <div className="ui-grid ui-grid--2" style={{ gap: 16, marginTop: 16 }}>
+                <div className="ui-field">
+                  <label className="ui-label" htmlFor="leave-od-start">From time</label>
+                  <input id="leave-od-start" type="time" name="odStartTime" value={formData.odStartTime} onChange={handleChange} aria-invalid={errors.odStartTime ? 'true' : undefined} />
+                  {errors.odStartTime ? <div className="ui-error">{errors.odStartTime}</div> : <div className="ui-hint">When your On Duty work starts</div>}
+                </div>
+                <div className="ui-field">
+                  <label className="ui-label" htmlFor="leave-od-end">To time</label>
+                  <input id="leave-od-end" type="time" name="odEndTime" value={formData.odEndTime} onChange={handleChange} min={formData.odStartTime || undefined} aria-invalid={errors.odEndTime ? 'true' : undefined} />
+                  {errors.odEndTime ? <div className="ui-error">{errors.odEndTime}</div> : <div className="ui-hint">When it ends</div>}
+                </div>
+              </div>
+            )}
             <label className="switch-row">
               <input type="checkbox" className="switch" name="halfDay" checked={formData.halfDay} onChange={handleChange} />
               <span>
@@ -377,6 +408,7 @@ export default function LeaveRequest() {
             <dl className="summary-list">
               <div><dt>Leave</dt><dd>{leaveTypeLabels[formData.leaveType] || <span className="muted">Not chosen</span>}</dd></div>
               <div><dt>Dates</dt><dd>{formData.startDate ? formatRange(formData.startDate, formData.halfDay ? formData.startDate : formData.endDate || formData.startDate) : <span className="muted">Not chosen</span>}</dd></div>
+              {isOD && <div><dt>OD time</dt><dd>{odTimeLabel || <span className="muted">Not chosen</span>}</dd></div>}
               <div className="summary-list__total"><dt>Duration requested</dt><dd>{calculatedDays > 0 ? durationLabel : '–'}</dd></div>
             </dl>
             <div className="summary-route">
@@ -459,6 +491,7 @@ export default function LeaveRequest() {
             <dt>From</dt><dd>{formatDate(formData.startDate, { weekday: true })}</dd>
             <dt>To</dt><dd>{formatDate(formData.halfDay ? formData.startDate : formData.endDate, { weekday: true })}</dd>
             <dt>Duration</dt><dd>{durationLabel}</dd>
+            {odTimeLabel && <><dt>OD time</dt><dd>{odTimeLabel}</dd></>}
             <dt>Reason</dt><dd style={{ whiteSpace: 'pre-line' }}>{formData.reason}</dd>
             {formData.attachments && <><dt>Document</dt><dd>{formData.attachments.name}</dd></>}
           </dl>

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from models.user import User
 from extensions import db
+from utils.departments import DEPARTMENT_ROLES, normalize_departments
 
 users_bp = Blueprint('users', __name__)
 
@@ -18,7 +19,7 @@ def get_all_users():
         user_role = claims.get('role')
         
         # Only coordinators and above can view all users
-        if user_role not in ['coordinator', 'chief_coordinator', 'principal']:
+        if user_role not in ['coordinator', 'chief_coordinator', 'principal', 'management']:
             return jsonify({
                 'success': False,
                 'message': 'Unauthorized access'
@@ -106,12 +107,31 @@ def update_user(user_id):
             }), 404
         
         data = request.get_json()
+
+        new_department = None
+        if 'department' in data or 'departments' in data:
+            raw = data.get('departments') if 'departments' in data else data.get('department')
+            if user.role in DEPARTMENT_ROLES:
+                new_department, dept_error = normalize_departments(raw)
+                if dept_error:
+                    return jsonify({'success': False, 'message': dept_error}), 400
+            else:
+                new_department = raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+        new_gender = None
+        if 'gender' in data:
+            new_gender = data['gender'].strip() if data['gender'] else None
+            if user.gender and new_gender != user.gender:
+                return jsonify({
+                    'success': False,
+                    'message': 'Gender has already been set and cannot be changed.'
+                }), 400
         
         # Update allowed fields
         if 'name' in data:
             user.name = data['name'].strip()
-        if 'department' in data:
-            user.department = data['department'].strip() if data['department'] else None
+        if 'department' in data or 'departments' in data:
+            user.department = new_department
         if 'phoneNumber' in data:
             user.phone_number = data['phoneNumber'].strip() if data['phoneNumber'] else None
         if 'employeeId' in data:
@@ -122,8 +142,8 @@ def update_user(user_id):
             user.qualification = data['qualification'].strip() if data['qualification'] else None
         if 'specialization' in data:
             user.specialization = data['specialization'].strip() if data['specialization'] else None
-        if 'gender' in data:
-            user.gender = data['gender'].strip() if data['gender'] else None
+        if 'gender' in data and not user.gender:
+            user.gender = new_gender
         if 'joiningDate' in data:
             user.joining_date = data['joiningDate'] if data['joiningDate'] else None
         

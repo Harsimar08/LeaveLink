@@ -7,10 +7,12 @@ export function navGroupsFor(role) {
   const mine = { to: '/leave-history', label: 'My Leaves', short: 'My Leaves', icon: 'history' }
   const holidays = { to: '/holidays', label: 'Holidays', icon: 'calendar' }
   const profile = { to: '/profile', label: 'Profile', icon: 'user' }
+  const staffHistory = { to: '/staff-leave-history', label: 'Leave History', short: 'History', icon: 'history' }
 
   if (role === 'management') {
     return [
       { label: 'Overview', items: [dashboard, approvals] },
+      { label: 'Records', items: [staffHistory] },
       { label: 'Institute', items: [holidays] },
     ]
   }
@@ -31,7 +33,7 @@ export function navGroupsFor(role) {
 export function tabItemsFor(role) {
   const groups = navGroupsFor(role).flatMap((g) => g.items)
   const pick = (...labels) => labels.map((label) => groups.find((item) => item.label === label)).filter(Boolean)
-  if (role === 'management') return pick('Dashboard', 'Approvals', 'Holidays')
+  if (role === 'management') return pick('Dashboard', 'Approvals', 'Leave History', 'Holidays')
   if (role === 'principal') return pick('Dashboard', 'Approvals', 'Apply Leave', 'Holidays')
   return pick('Dashboard', 'Apply Leave', 'My Leaves', 'Holidays')
 }
@@ -44,6 +46,7 @@ const TITLES = [
   [/^\/leave-requests\//, 'Approvals', 'Leave Request'],
   [/^\/leave-request$/, 'My leave', 'Apply Leave'],
   [/^\/leave-history/, 'My leave', 'My Leaves'],
+  [/^\/staff-leave-history/, 'Records', 'Leave History'],
   [/^\/leave-balance/, 'My leave', 'Leave Balance'],
   [/^\/holidays/, 'Institute', 'Holidays'],
   [/^\/profile/, 'Institute', 'My Profile'],

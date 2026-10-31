@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { getAllUsers } from '../utils/api-auth'
 import { useLeaves } from '../utils/leavesStore'
 import { useHolidays, upcomingHolidays } from '../utils/holidays'
-import { formatLeaveDays } from '../utils/leaveFormat'
+import { formatLeaveDays, formatOdTime } from '../utils/leaveFormat'
 import { formatRole } from '../utils/roles'
 import { MONTH_NAMES, WEEKDAYS, formatDate, formatRange, parseDay, relativeDays, toISODate } from '../utils/dates'
 
@@ -478,6 +478,7 @@ export default function Dashboard() {
               ['To Date', formatDate(selectedLeave.endDate || selectedLeave.startDate)],
               ['Duration', formatLeaveDays(selectedLeave)],
               ['Half Day', selectedLeave.isHalfDay ? 'Yes' : 'No'],
+              ...(formatOdTime(selectedLeave) ? [['OD Time', formatOdTime(selectedLeave)]] : []),
               ['Applied On', formatDate(selectedLeave.createdAt)],
               ['Action Taken On', selectedLeave.actionDate ? formatDate(selectedLeave.actionDate) : '-'],
               [selectedLeave.status === 'Rejected' ? 'Rejected By' : 'Approved By', selectedLeave.approverName || selectedLeave.approver?.name || '-'],

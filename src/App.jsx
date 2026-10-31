@@ -27,6 +27,7 @@ const Approvals = lazy(() => import('./pages/Approvals'))
 const ManagementDashboard = lazy(() => import('./pages/ManagementDashboard'))
 const PrincipalDashboard = lazy(() => import('./pages/PrincipalDashboard'))
 const LeaveReview = lazy(() => import('./pages/LeaveReview'))
+const StaffLeaveHistory = lazy(() => import('./pages/StaffLeaveHistory'))
 
 const RAIL_KEY = 'leavelink:sidebar-rail'
 const MOBILE_QUERY = '(max-width: 980px)'
@@ -147,6 +148,7 @@ function Shell() {
               <Route path="/leave-request-details" element={<Navigate to="/approvals" replace />} />
               <Route path="/leave-requests/:leaveId" element={<LeaveReview />} />
               <Route path="/management-dashboard" element={role === 'management' ? <ManagementDashboard /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/staff-leave-history" element={role === 'management' ? <StaffLeaveHistory /> : <Navigate to="/dashboard" replace />} />
               <Route path="/principal-dashboard" element={role === 'principal' ? <PrincipalDashboard /> : <Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<LoggedInRedirect />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

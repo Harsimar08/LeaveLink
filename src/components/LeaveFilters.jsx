@@ -1,6 +1,7 @@
 import React from 'react'
 import Icon from './ui/Icon'
 import { formatRole } from '../utils/roles'
+import { splitDepartments } from '../utils/departments'
 
 export { formatRole }
 
@@ -17,6 +18,8 @@ export function filterLeaves(leaves, filters, { ignoreStatus = false } = {}) {
     if (!ignoreStatus && filters.status !== 'All' && leave.status !== filters.status) return false
     if (filters.leaveType !== 'All' && leave.leaveType !== filters.leaveType) return false
     if (filters.role !== 'All' && leave.user?.role !== filters.role) return false
+    if (filters.teacher && filters.teacher !== 'All' && String(leave.user?.id ?? leave.userId) !== filters.teacher) return false
+    if (filters.department && filters.department !== 'All' && !(splitDepartments(leave.user?.department).length ? splitDepartments(leave.user?.department) : ['Unassigned']).includes(filters.department)) return false
     const start = day(leave.startDate)
     const end = day(leave.endDate) || start
     if (filters.from && end && end < filters.from) return false
@@ -68,7 +71,7 @@ export function StatusTabs({ value, onChange, counts, options = ['All', ...LEAVE
   )
 }
 
-export default function LeaveFilters({ filters, onChange, leaveTypes = [], roles = [], shown, total, defaults = emptyLeaveFilters, searchPlaceholder = 'Search...' }) {
+export default function LeaveFilters({ filters, onChange, leaveTypes = [], roles = [], teachers = [], departments = [], shown, total, defaults = emptyLeaveFilters, searchPlaceholder = 'Search...' }) {
   const set = (key) => (e) => onChange({ ...filters, [key]: e.target.value })
   const isDefault = Object.keys(defaults).every((key) => filters[key] === defaults[key])
 
@@ -82,6 +85,24 @@ export default function LeaveFilters({ filters, onChange, leaveTypes = [], roles
             <input id="leave-filter-search" type="text" value={filters.search} onChange={set('search')} placeholder={searchPlaceholder} />
           </div>
         </div>
+        {teachers.length > 0 && (
+          <div className="ui-field">
+            <label className="ui-label" htmlFor="leave-filter-teacher">Teacher</label>
+            <select id="leave-filter-teacher" value={filters.teacher || 'All'} onChange={set('teacher')}>
+              <option value="All">All teachers</option>
+              {teachers.map((t) => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+            </select>
+          </div>
+        )}
+        {departments.length > 1 && (
+          <div className="ui-field">
+            <label className="ui-label" htmlFor="leave-filter-department">Department</label>
+            <select id="leave-filter-department" value={filters.department || 'All'} onChange={set('department')}>
+              <option value="All">All departments</option>
+              {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        )}
         <div className="ui-field">
           <label className="ui-label" htmlFor="leave-filter-status">Status</label>
           <select id="leave-filter-status" value={filters.status} onChange={set('status')}>

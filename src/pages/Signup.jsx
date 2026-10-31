@@ -1,12 +1,14 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { registerUser } from '../utils/api-auth'
+import { getDepartmentCoordinators, registerUser } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
 import { dashboardPathFor } from '../utils/roles'
 import AuthBrandPanel from '../components/AuthBrandPanel'
 import Icon from '../components/ui/Icon'
 import { Notice } from '../components/ui'
 import RolePicker from '../components/RolePicker'
+import DepartmentPicker, { CoordinatorList } from '../components/DepartmentPicker'
+import { DEPARTMENT_ROLES, TEACHER_ROLES, departmentLabelFor } from '../utils/departments'
 import '../styles/auth.css'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -22,13 +24,25 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [departments, setDepartments] = useState([])
+  const [coordinators, setCoordinators] = useState({})
 
   const departmentOptional = selectedRole === 'principal' || selectedRole === 'management'
+  const pickDepartments = DEPARTMENT_ROLES.includes(selectedRole)
+  const isTeacher = TEACHER_ROLES.includes(selectedRole)
+
+  useEffect(() => {
+    getDepartmentCoordinators().then(setCoordinators).catch(() => setCoordinators({}))
+  }, [])
+
+  const touchDepartment = useCallback(() => setTouched((prev) => ({ ...prev, department: true })), [])
 
   const errors = {
     name: !formData.name.trim() && 'Enter your full name.',
     email: !formData.email.trim() ? 'Enter your JIMS email address.' : !EMAIL_PATTERN.test(formData.email.trim()) && 'That doesn\u2019t look like a valid email address.',
-    department: !departmentOptional && !formData.department.trim() && 'Enter your department.',
+    department: pickDepartments
+      ? !departments.length && 'Select at least one department.'
+      : !departmentOptional && !formData.department.trim() && 'Enter your department.',
     password: formData.password.length < 6 && 'Use at least 6 characters.',
     confirmPassword: formData.confirmPassword !== formData.password && 'Passwords do not match.',
   }
@@ -47,7 +61,7 @@ export default function Signup() {
     const firstInvalid = Object.keys(errors).find((key) => errors[key])
     if (firstInvalid) {
       setTouched({ name: true, email: true, department: true, password: true, confirmPassword: true })
-      document.querySelector(`[name="${firstInvalid}"]`)?.focus()
+      document.getElementById(`signup-${firstInvalid}`)?.focus()
       return
     }
 
@@ -58,7 +72,9 @@ export default function Signup() {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         role: selectedRole,
-        department: formData.department.trim() || (departmentOptional ? 'Administration' : 'General'),
+        ...(pickDepartments
+          ? { departments }
+          : { department: formData.department.trim() || (departmentOptional ? 'Administration' : 'General') }),
         employeeId: formData.employeeId.trim() || undefined,
         phoneNumber: formData.phoneNumber.trim() || undefined,
       })
@@ -127,9 +143,30 @@ export default function Signup() {
               {field('name', 'Full name', { icon: 'user', placeholder: 'Dr. Kritika Sharma', autoComplete: 'name' })}
               {field('email', 'JIMS email', { type: 'email', icon: 'mail', placeholder: 'name@jimsindia.org', autoComplete: 'email' })}
               <div className="ui-grid ui-grid--2" style={{ gap: 14 }}>
-                {field('department', 'Department', { icon: 'building', placeholder: 'Computer Applications', optional: departmentOptional })}
+                {pickDepartments ? (
+                  <div className="ui-field">
+                    <label className="ui-label" htmlFor="signup-department">{departmentLabelFor(selectedRole)}</label>
+                    <DepartmentPicker
+                      id="signup-department"
+                      value={departments}
+                      onChange={(next) => { setDepartments(next); setError('') }}
+                      onClose={touchDepartment}
+                      invalid={!!show('department')}
+                      describedBy={show('department') ? 'signup-department-error' : 'signup-department-hint'}
+                    />
+                    {show('department')
+                      ? <div id="signup-department-error" className="ui-error">{errors.department}</div>
+                      : <div id="signup-department-hint" className="ui-hint">You can select more than one.</div>}
+                  </div>
+                ) : field('department', 'Department', { icon: 'building', placeholder: 'Computer Applications', optional: departmentOptional })}
                 {field('employeeId', 'Employee ID', { icon: 'file', placeholder: 'JIMS-2024-08', optional: true })}
               </div>
+              {isTeacher && (
+                <div className="ui-field">
+                  <span className="ui-label">{departments.length > 1 ? 'Your Coordinators' : 'Your Coordinator'}</span>
+                  <CoordinatorList departments={departments} coordinators={coordinators} />
+                </div>
+              )}
               <div className="ui-grid ui-grid--2" style={{ gap: 14 }}>
                 {field('password', 'Password', { icon: 'lock', placeholder: 'At least 6 characters', autoComplete: 'new-password', toggle: true })}
                 {field('confirmPassword', 'Confirm password', { icon: 'lock', placeholder: 'Type it again', autoComplete: 'new-password', toggle: true })}

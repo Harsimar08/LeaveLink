@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import { updateUserProfile } from '../utils/api-auth'
 import { useAuth } from '../contexts/AuthContext'
 import { Icon, Spinner } from '../components/ui'
+import { useFeedback } from '../components/ui/Feedback'
+import DepartmentPicker from '../components/DepartmentPicker'
+import { DEPARTMENT_ROLES, DEPARTMENTS, TEACHER_ROLES, departmentLabelFor, joinDepartments, splitDepartments } from '../utils/departments'
 
 // Shared design tokens from styles.css
 const C = {
@@ -32,15 +35,84 @@ const toProfileState = (source) => ({
   department: source?.department || '',
   phone: source?.phoneNumber || source?.phone || '',
   employeeId: source?.employeeId || '',
-  gender: source?.gender || 'Male',
+  gender: source?.gender || '',
   qualification: source?.qualification || '',
   specialization: source?.specialization || '',
   joiningDate: source?.joiningDate || ''
 })
 
+const fieldLabelStyle = {
+  color: C.gold600,
+  fontSize: '12.5px',
+  fontWeight: 700,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  marginBottom: '4px'
+}
+
+function DepartmentField({ label, value, saving, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [picked, setPicked] = useState([])
+  const known = splitDepartments(value).filter((d) => DEPARTMENTS.includes(d))
+  const hasValue = !!(value && String(value).trim())
+
+  const start = () => { setPicked(known); setEditing(true) }
+  const save = () => {
+    if (!picked.length) return
+    onSave(picked)
+    setEditing(false)
+  }
+
+  return (
+    <div style={{ padding: '14px 0', borderBottom: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '62px', boxSizing: 'border-box' }}>
+      <div style={{ flex: 1, marginRight: '16px', minWidth: 0 }}>
+        <div id="profile-department-label" style={fieldLabelStyle}>{label}</div>
+        {editing ? (
+          <div style={{ maxWidth: 280 }}>
+            <DepartmentPicker id="profile-department" value={picked} onChange={setPicked} invalid={!picked.length} describedBy="profile-department-label" />
+            {!picked.length && <div className="ui-error">Select at least one department.</div>}
+          </div>
+        ) : (
+          <div style={{ color: hasValue ? C.ink900 : C.ink400, fontSize: '14.5px', fontWeight: hasValue ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {hasValue ? value : 'Not added'}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {editing && (
+          <button type="button" onClick={() => setEditing(false)} style={{ padding: '5px 12px', border: '1px solid #E2E8F0', borderRadius: '6px', background: '#FFFFFF', color: C.navy950, cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+            Cancel
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={editing ? save : start}
+          disabled={saving || (editing && !picked.length)}
+          style={{
+            padding: '5px 16px',
+            border: `1px solid ${editing ? C.gold500 : '#E2E8F0'}`,
+            borderRadius: '6px',
+            background: editing ? C.gold500 : '#FFFFFF',
+            color: editing ? '#FFFFFF' : C.navy950,
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+          }}
+        >
+          {editing ? 'Save' : 'Edit'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Profile() {
   const fileInputRef = useRef(null)
   const { user: authUser, refreshUser } = useAuth()
+  const { confirm } = useFeedback()
+  const genderLocked = !!(authUser?.gender && String(authUser.gender).trim())
   const [profileImage, setProfileImage] = useState(authUser?.profileImage || null)
   const [editMode, setEditMode] = useState({})
   const [saving, setSaving] = useState(false)
@@ -144,7 +216,19 @@ export default function Profile() {
 
   const startEdit = (field) => setEditMode({ [field]: true })
 
+  const chooseGender = async (value) => {
+    if (genderLocked || saving) return
+    const ok = await confirm({
+      title: `Set gender to ${value}?`,
+      message: 'Once saved, gender cannot be changed.',
+      confirmLabel: 'Save gender',
+      icon: 'lock',
+    })
+    if (ok) saveField('gender', value)
+  }
+
   const saveField = async (field, value) => {
+    const previous = user[field]
     try {
       setSaving(true)
       setUser(prev => ({ ...prev, [field]: value }))
@@ -168,7 +252,8 @@ export default function Profile() {
       setEditMode({})
     } catch (error) {
       console.error('Error saving field:', error)
-      showMessage('error', `Failed to update ${field}`)
+      setUser(prev => ({ ...prev, [field]: previous }))
+      showMessage('error', error?.message || `Failed to update ${field}`)
     } finally {
       setSaving(false)
     }
@@ -476,30 +561,36 @@ export default function Profile() {
                     }}>
                       Gender
                     </div>
-                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: C.ink900, fontWeight: 500 }}>
-                        <input
-                          type="radio"
-                          name="gender"
-                          value="Male"
-                          checked={user.gender === 'Male'}
-                          onChange={(e) => saveField('gender', e.target.value)}
-                          style={{ accentColor: C.gold600 }}
-                        />
-                        Male
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: C.ink900, fontWeight: 500 }}>
-                        <input
-                          type="radio"
-                          name="gender"
-                          value="Female"
-                          checked={user.gender === 'Female'}
-                          onChange={(e) => saveField('gender', e.target.value)}
-                          style={{ accentColor: C.gold600 }}
-                        />
-                        Female
-                      </label>
-                    </div>
+                    {genderLocked ? (
+                      <div>
+                        <div style={{ color: C.ink900, fontSize: '14.5px', fontWeight: 600 }}>{authUser.gender}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, color: C.ink600, fontSize: '12.5px' }}>
+                          <Icon name="lock" size={13} /> Gender cannot be changed once set.
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                          {['Male', 'Female'].map((option) => (
+                            <label key={option} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: C.ink900, fontWeight: 500 }}>
+                              <input
+                                type="radio"
+                                name="gender"
+                                value={option}
+                                checked={user.gender === option}
+                                disabled={saving}
+                                onChange={(e) => chooseGender(e.target.value)}
+                                style={{ accentColor: C.gold600 }}
+                              />
+                              {option}
+                            </label>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: 6, color: C.ink600, fontSize: '12.5px' }}>
+                          Not set yet. You can set this once; it cannot be changed later.
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -534,7 +625,25 @@ export default function Profile() {
               }}>
                 {/* Left Column */}
                 <div>
-                  <EditableField label="Department" value={user.department} field="department" placeholder="Not added" />
+                  {DEPARTMENT_ROLES.includes(authUser?.role) ? (
+                    <DepartmentField
+                      label={departmentLabelFor(authUser.role)}
+                      value={user.department}
+                      saving={saving}
+                      onSave={(list) => saveField('department', joinDepartments(list))}
+                    />
+                  ) : (
+                    <EditableField label="Department" value={user.department} field="department" placeholder="Not added" />
+                  )}
+                  {TEACHER_ROLES.includes(authUser?.role) && (
+                    <EditableField
+                      label={(authUser.coordinators || []).length > 1 ? 'Coordinators' : 'Coordinator'}
+                      value={(authUser.coordinators || []).map((c) => `${c.department}: ${c.names.length ? c.names.join(', ') : 'Not assigned yet'}`).join(' · ')}
+                      field="coordinator"
+                      placeholder="Select a department first"
+                      readOnly
+                    />
+                  )}
                   <EditableField label="Qualification" value={user.qualification} field="qualification" placeholder="Not added" />
                   <EditableField label="Joining Date" value={user.joiningDate} field="joiningDate" type="date" placeholder="Not added" />
                 </div>

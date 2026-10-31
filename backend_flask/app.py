@@ -334,6 +334,9 @@ def migrate_leave_half_day_columns():
 
     if 'is_half_day' not in columns:
         statements.append('ALTER TABLE leaves ADD COLUMN is_half_day BOOLEAN NOT NULL DEFAULT FALSE')
+    for name in ('od_start_time', 'od_end_time'):
+        if name not in columns:
+            statements.append(f'ALTER TABLE leaves ADD COLUMN {name} VARCHAR(5)')
 
     days_type = str(columns.get('number_of_days', {}).get('type', '')).upper()
     if 'INT' in days_type:

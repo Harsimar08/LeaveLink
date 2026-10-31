@@ -11,6 +11,8 @@ class Leave(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     number_of_days = db.Column(db.Float, nullable=False)
     is_half_day = db.Column(db.Boolean, default=False, nullable=False)
+    od_start_time = db.Column(db.String(5))  # "HH:MM", On Duty leave only
+    od_end_time = db.Column(db.String(5))
     reason = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(50), default='Pending', nullable=False)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
@@ -35,6 +37,8 @@ class Leave(db.Model):
             'endDate': self.end_date.isoformat() if self.end_date else None,
             'numberOfDays': self.number_of_days,
             'isHalfDay': bool(self.is_half_day),
+            'odStartTime': self.od_start_time,
+            'odEndTime': self.od_end_time,
             'reason': self.reason,
             'status': self.status,
             'approvedBy': self.approved_by,
